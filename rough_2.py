@@ -1,15 +1,14 @@
-import time
+from fabric import Connection
+# from fabric.runners import
 
-file_name='o2.log'
-f = open(file_name, 'r')
 
-while True:
+def log(msg):
+    logfile=open("dummy.txt","a+")
+    logfile.write(msg)
+    logfile.close()
 
-    line = f.readline()
-    if not line :
-        time.sleep(10)
-        #print('Nothing New')
-    else:
-        if line == "PAUSED":
-            print('MOLCAS ', line)
-            exit()
+c=Connection('allogin2.fkf.mpg.de')
+result=c.run('llq -j allogin2.35393.0')
+print(result.stdout.split()[19])
+
+#print()

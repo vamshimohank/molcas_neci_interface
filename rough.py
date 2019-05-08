@@ -1,30 +1,40 @@
-import collections
-import subprocess
-import time
-import threading
+from molcas_run import *
 
-def read_output(process, append):
-    for line in iter(process.stdout.readline, ""):
-        append(line)
+ # please set these variables
 
-def main():
-    # start process, redirect stdout
-    process = subprocess.Popen(["top"], stdout=subprocess.PIPE, close_fds=True)
-    try:
-        # save last `number_of_lines` lines of the process output
-        number_of_lines = 200
-        q = collections.deque(maxlen=number_of_lines) # atomic .append()
-        t = threading.Thread(target=read_output, args=(process, q.append))
-        t.daemon = True
-        t.start()
+neci_scratch='/algpfs/katukuri/molcas_neci/'
+remote_ip='allogin2.fkf.mpg.de'
+neci_job_script='neci_submit.job'
+Molcas_WorkDir=os.getcwd()+'/tmp/'
+currdir = os.getcwd()
 
-        #
-        time.sleep(2)
-    finally:
-        process.terminate() #NOTE: it doesn't ensure the process termination
+project='o2'
+molcas_submission_script = 'run_molcas.sh' # a bash script on local PC
 
-    # print saved lines
-    print (q)
+# molcas project details
+inp_file=project+'.inp'
+out_file = project+'.log'
 
-if __name__=="__main__":
-    main()
+# set environment variables
+os.environ['REMOTE_MACHINE_IP'] = remote_ip
+os.environ['REMOTE_NECI_WorkDir'] = neci_scratch
+os.environ['NECI_JOB_SCRIPT'] = neci_job_script
+os.environ['MOLCAS_WorkDir'] = Molcas_WorkDir
+os.environ['CurrDir']= currdir
+os.environ['PYTHONWARNINGS']='ignore'
+
+
+# run molcas submission script
+molcas_process = executeMolcas(molcas_submission_script,inp_file)
+molcas_WorkDir=check_if_molcas_done(out_file)
+
+# transfer files to remote/local machine to run NECI
+job_folder=str(os.getpid())
+neci_work_dir=neci_scratch+job_folder+'/'
+
+job_id=run_neci_on_remote(project)
+check_if_job_running(remote_ip,job_id)
+check_if_neci_is_done(neci_work_dir)
+
+# check_if_neci_is_done(neci_WorkDir)
+# get_rdms_from_neci(neci_WorkDir)

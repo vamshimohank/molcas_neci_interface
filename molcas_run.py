@@ -3,80 +3,133 @@ import subprocess
 import time
 #import sh
 
+import sys
+
+os.environ['PYTHONWARNINGS']="ignore"
+
+if not sys.warnoptions:
+    import os, warnings
+    warnings.simplefilter("default") # Change the filter in this process
+    os.environ["PYTHONWARNINGS"] = "ignore"
 
 def get_e(out_file):
 	f = open(out_file)
 	Pr = False
 	string='REDUCED DENSITY MATRICES'
 	for line in f.readlines():
-	        if string in line:
-	                E=line.split()[8]
-	                return E
-	                break
+		if string in line:
+			E=line.split()[8]
+			return E
+			break
 	f.close()
 
 def copy_to_molcas_workdir(project,neci_scratch_dir):
-        cmd="scp allogin2.fkf.mpg.de:" + neci_scratch_dir + '/TwoRDM* ./tmp/'
-        subprocess.call("%s" % cmd,shell=True)
-        cmd="scp allogin2.fkf.mpg.de:" + neci_scratch_dir + '/out .'
-        subprocess.call("%s" % cmd,shell=True)
-#        shutil.move('./tmp/TwoRDM_aaaa.1', './tmp/'+project+'.TwoRDM_aaaa')
-#        shutil.move('./tmp/TwoRDM_abab.1', './tmp/'+project+'.TwoRDM_abab')
-#        shutil.move('./tmp/TwoRDM_abba.1', './tmp/'+project+'.TwoRDM_abba')
-#        shutil.move('./tmp/TwoRDM_bbbb.1', './tmp/'+project+'.TwoRDM_bbbb')
-#        shutil.move('./tmp/TwoRDM_baba.1', './tmp/'+project+'.TwoRDM_baba')
-#        shutil.move('./tmp/TwoRDM_baab.1', './tmp/'+project+'.TwoRDM_baab')
+	cmd="scp allogin2.fkf.mpg.de:" + neci_scratch_dir + '/TwoRDM* ./tmp/'
+	subprocess.call("%s" % cmd,shell=True)
+	cmd="scp allogin2.fkf.mpg.de:" + neci_scratch_dir + '/out .'
+	subprocess.call("%s" % cmd,shell=True)
 
 def copy_to_main_dir(project,neci_scratch_dir):
 	shutil.copyfile(os.path.join(neci_scratch_dir,'TwoRDM_abab.1'), './'+project+'.TwoRDM_abab')
 	shutil.copyfile(os.path.join(neci_scratch_dir,'TwoRDM_abba.1'), './'+project+'.TwoRDM_abba')
 	shutil.copyfile(os.path.join(neci_scratch_dir,'OneRDM.1'), './'+project+'.OneRDM')
 
-def transfer_neci_files_to_remote(remote_ip,user,remote_folder_absolute_path):
+def run_neci_on_remote(project):
+
 	from fabric import Connection
-    c=Connection(remote_ip)
-	c.run('mkdir {0}'.format(remote_folder_absolute_path))
 
+	import sys
 
-def exec_neci(project,molcas_WorkDir,neci_scratch_dir='tmp'):
 	import os
-	remote_machine="allogin2.fkf.mpg.de"
-	user='katukuri'
-	neci_WorkDir="/algpfs/katukuri/molcas_neci/"+str(os.getpid())
-	tmp_neci_dir='tmp_neci_dir'
-	# if  os.path.isdir(tmp_neci_dir) :
-	# 	os.removedirs(tmp_neci_dir)
-	# 	os.mkdir(tmp_neci_dir)
-	# shutil.copyfile(os.path.join(molcas_WorkDir, project+'.FciDmp'), tmp_neci_dir+'/FCIDUMP')
-	# shutil.copyfile(os.path.join(molcas_WorkDir, project+'.FciInp'), tmp_neci_dir+'/input')
 
-	transfer_neci_files_to_remote(remote_machine,user,neci_WorkDir)
-	cmd = 'scp -r '+ tmp_neci_dir + remote_machine + neci_WorkDir
-	subprocess.call("%s" % cmd,shell=True)
-	# shutil.copyfile(project+'.FciInp', os.path.join(neci_scratch_dir,project+'.FciInp'))
-	# fciqmc_infile=os.path.join(neci_scratch_dir,project+'.FciInp')
-	# fciqmc_outfile=os.path.join(neci_scratch_dir,project+'.FciOut')
+	if not sys.warnoptions:
+		import os, warnings
+		warnings.simplefilter("ignore") # Change the filter in this process
+		os.environ["PYTHONWARNINGS"] = "default"
 
-#	outfiletmp = os.path.join(neci_scratch_dir,project+'.FciOut')
-#	files = os.listdir(neci_scratch_dir + '.')
-#	# Search for an unused output file.
-#	i = 1
-#	while outfiletmp in files:
-#		outfiletmp = fciqmcci.outputFileRoot + '_' + str(i)
-#		i += 1
-##    logger.info(fciqmcci, 'FCIQMC output file: %s', outfiletmp)
-#	fciqmcci.outputFileCurrent = outfiletmp
-#	fciqmc_outfile = os.path.join(fciqmcci.scratchDirectory, outfiletmp)
+	remote_ip=os.getenv('REMOTE_MACHINE_IP')
+	remote_WorkDir=os.getenv('REMOTE_NECI_WorkDir')
+	molcas_WorkDir=os.getenv('MOLCAS_WorkDir')
+	CurrDir=os.getenv('CurrDir')
+	user=os.getenv('USER')
+	neci_job_script=os.getenv('NECI_JOB_SCRIPT')
+	job_folder=str(os.getpid())
+	neci_WorkDir=remote_WorkDir+'/'+job_folder+'/'
 
-	# RUN NECI
-	"""
-	os.chdir(neci_scratch_dir)
-	subprocess.call("%s  %s > %s" % (fciqmc_exe, project+'.FciInp',project+'.FciOut'), shell=True)
-	os.chdir('../')
-	E=get_e(fciqmc_outfile)
-	copy_to_main_dir(project,neci_scratch_dir)
-	return E
-	"""
+	c=Connection(remote_ip,user=user)
+	print('Transferring FciInp and FciDmp to the remote computer {0}:{1}'.format(remote_ip,neci_WorkDir))
+	c.run('mkdir {0}'.format(neci_WorkDir))
+	c.put(molcas_WorkDir+'/'+project+'.FciInp',remote=neci_WorkDir)
+	c.put(molcas_WorkDir+'/'+project+'.FciDmp',remote=neci_WorkDir)
+	c.put(CurrDir+'/'+neci_job_script,remote=neci_WorkDir)
+	print("Submiting the job to the queue ...")
+	with c.cd(neci_WorkDir):
+		job_submit_line=c.run('llsubmit {0}'.format(neci_job_script))
+	job_id=job_submit_line.stdout.split()[3]
+	# sys.stdout.write(job_submit_line)
+	c.close()
+	return job_id
+
+	# return neci_WorkDir
+
+def check_if_job_running(remote_ip,job_id):
+	from time import sleep
+	from fabric import Connection
+	c=Connection(remote_ip)
+	result=c.run('llq -j {0}'.format(job_id))
+	status=result.stdout.split()[19]
+	while status != "R":
+		if status == "I":
+			print('Job waiting in queue')
+		if status == "I":
+			print('Job waiting in queue')
+		sleep(10)
+		result=c.run('llq -j {0}'.format(job_id))
+		status=result.stdout.split()[19]
+	print('Job running ....')
+	print('checking if RDMs are created ....')
+	return status
+
+def get_rdms_from_neci(neci_WorkDir):
+	from fabric import Connection
+	remote_ip=os.getenv('REMOTE_MACHINE_IP')
+	user=os.getenv('USER')
+	c=Connection(remote_ip,user=user)
+
+	molcas_WorkDir=os.getenv('MOLCAS_WorkDir')
+	remote_WorkDir=os.getenv('REMOTE_NECI_WorkDir')
+	# neci_WorkDir=remote_WorkDir+job_folder+'/'
+	print(neci_WorkDir)
+	print(molcas_WorkDir)
+	c.get(neci_WorkDir+'TwoRDM_aaaa.1',local=molcas_WorkDir+'TwoRDM_aaaa.1') #,local=molcas_WorkDir)
+	c.get(neci_WorkDir+'TwoRDM_abab.1',local=molcas_WorkDir+'TwoRDM_abab.1')
+	c.get(neci_WorkDir+'TwoRDM_abba.1',local=molcas_WorkDir+'TwoRDM_abba.1')
+	c.get(neci_WorkDir+'TwoRDM_bbbb.1',local=molcas_WorkDir+'TwoRDM_bbbb.1')
+	c.get(neci_WorkDir+'TwoRDM_baba.1',local=molcas_WorkDir+'TwoRDM_baba.1')
+	c.get(neci_WorkDir+'TwoRDM_baab.1',local=molcas_WorkDir+'TwoRDM_baab.1')
+	c.get(neci_WorkDir+'out',local=molcas_WorkDir+'neci.out')
+	c.close
+
+def check_if_neci_is_done(neci_WorkDir):
+	from time import sleep
+
+	sleep(60)
+	while True:
+
+		line = f.readline()
+		if not line :
+			time.sleep(2)
+			print('MOLCAL log file not yet created!')
+		else:
+			# print(line.split())
+			if len(line.split()) != 0 and line.split()[0] == "PAUSED":
+				molcas_WorkDir=line_temp.split()[0]
+				# print('MOLCAS ', line)
+				f.close()
+				return molcas_WorkDir
+			else:
+				line_temp=line
+
 
 def check_molcas_status(out_file):
 	import time
@@ -95,14 +148,15 @@ def executeMolcas(submission_script,project):
 		cmd="sh " + submission_script + " "
 		# molcas_process=subprocess.Popen("%s  %s -o " % (cmd,project),stdout=subprocess.PIPE)
 		molcas_process=subprocess.Popen("%s  %s -o " % (cmd,project),shell=True,close_fds=True) #,stdout=subprocess.PIPE)
+		print('MOLCAS running ...')
 		# molcas_process=subprocess.Popen("%s  %s -f %s -b 1" % (molcas_exe,in_file,out_file),shell=True,close_fds=True)
 	except subprocess.CalledProcessError as err:
 		raise err
 	return molcas_process
 
 def check_if_molcas_done(out_file):
+	time.sleep(20)
 	f = open(out_file, 'r')
-	time.sleep(5)
 	line_temp=''
 	while True:
 
@@ -114,7 +168,7 @@ def check_if_molcas_done(out_file):
 			# print(line.split())
 			if len(line.split()) != 0 and line.split()[0] == "PAUSED":
 				molcas_WorkDir=line_temp.split()[0]
-				# print('MOLCAS ', line)
+				print('Files for NECI are produced', )
 				f.close()
 				return molcas_WorkDir
 			else:
