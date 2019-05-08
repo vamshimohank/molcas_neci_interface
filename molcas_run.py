@@ -15,17 +15,47 @@ def get_e(out_file):
 	                break
 	f.close()
 
+def copy_to_molcas_workdir(project,neci_scratch_dir):
+        cmd="scp allogin2.fkf.mpg.de:" + neci_scratch_dir + '/TwoRDM* ./tmp/'
+        subprocess.call("%s" % cmd,shell=True)
+        cmd="scp allogin2.fkf.mpg.de:" + neci_scratch_dir + '/out .'
+        subprocess.call("%s" % cmd,shell=True)
+#        shutil.move('./tmp/TwoRDM_aaaa.1', './tmp/'+project+'.TwoRDM_aaaa')
+#        shutil.move('./tmp/TwoRDM_abab.1', './tmp/'+project+'.TwoRDM_abab')
+#        shutil.move('./tmp/TwoRDM_abba.1', './tmp/'+project+'.TwoRDM_abba')
+#        shutil.move('./tmp/TwoRDM_bbbb.1', './tmp/'+project+'.TwoRDM_bbbb')
+#        shutil.move('./tmp/TwoRDM_baba.1', './tmp/'+project+'.TwoRDM_baba')
+#        shutil.move('./tmp/TwoRDM_baab.1', './tmp/'+project+'.TwoRDM_baab')
+
 def copy_to_main_dir(project,neci_scratch_dir):
-	shutil.copyfile(os.path.join(neci_scratch_dir,'TwoRDM_aaaa.1'), './'+project+'.TwoRDM_aaaa')
 	shutil.copyfile(os.path.join(neci_scratch_dir,'TwoRDM_abab.1'), './'+project+'.TwoRDM_abab')
 	shutil.copyfile(os.path.join(neci_scratch_dir,'TwoRDM_abba.1'), './'+project+'.TwoRDM_abba')
 	shutil.copyfile(os.path.join(neci_scratch_dir,'OneRDM.1'), './'+project+'.OneRDM')
 
-def exec_neci(neci_scratch_dir,project):
-	shutil.copyfile(project+'.FciDmp', neci_scratch_dir+'/FCIDUMP')
-	shutil.copyfile(project+'.FciInp', os.path.join(neci_scratch_dir,project+'.FciInp'))
-	fciqmc_infile=os.path.join(neci_scratch_dir,project+'.FciInp')
-	fciqmc_outfile=os.path.join(neci_scratch_dir,project+'.FciOut')
+def transfer_neci_files_to_remote(remote_ip,user,remote_folder_absolute_path):
+	from fabric import Connection
+    c=Connection(remote_ip)
+	c.run('mkdir {0}'.format(remote_folder_absolute_path))
+
+
+def exec_neci(project,molcas_WorkDir,neci_scratch_dir='tmp'):
+	import os
+	remote_machine="allogin2.fkf.mpg.de"
+	user='katukuri'
+	neci_WorkDir="/algpfs/katukuri/molcas_neci/"+str(os.getpid())
+	tmp_neci_dir='tmp_neci_dir'
+	# if  os.path.isdir(tmp_neci_dir) :
+	# 	os.removedirs(tmp_neci_dir)
+	# 	os.mkdir(tmp_neci_dir)
+	# shutil.copyfile(os.path.join(molcas_WorkDir, project+'.FciDmp'), tmp_neci_dir+'/FCIDUMP')
+	# shutil.copyfile(os.path.join(molcas_WorkDir, project+'.FciInp'), tmp_neci_dir+'/input')
+
+	transfer_neci_files_to_remote(remote_machine,user,neci_WorkDir)
+	cmd = 'scp -r '+ tmp_neci_dir + remote_machine + neci_WorkDir
+	subprocess.call("%s" % cmd,shell=True)
+	# shutil.copyfile(project+'.FciInp', os.path.join(neci_scratch_dir,project+'.FciInp'))
+	# fciqmc_infile=os.path.join(neci_scratch_dir,project+'.FciInp')
+	# fciqmc_outfile=os.path.join(neci_scratch_dir,project+'.FciOut')
 
 #	outfiletmp = os.path.join(neci_scratch_dir,project+'.FciOut')
 #	files = os.listdir(neci_scratch_dir + '.')
@@ -39,13 +69,14 @@ def exec_neci(neci_scratch_dir,project):
 #	fciqmc_outfile = os.path.join(fciqmcci.scratchDirectory, outfiletmp)
 
 	# RUN NECI
+	"""
 	os.chdir(neci_scratch_dir)
 	subprocess.call("%s  %s > %s" % (fciqmc_exe, project+'.FciInp',project+'.FciOut'), shell=True)
 	os.chdir('../')
 	E=get_e(fciqmc_outfile)
 	copy_to_main_dir(project,neci_scratch_dir)
 	return E
-
+	"""
 
 def check_molcas_status(out_file):
 	import time
@@ -58,18 +89,48 @@ def check_molcas_status(out_file):
 			break
 #        return neci
 
-def executeMolcas(in_file,out_file):
+def executeMolcas(submission_script,project):
 	try:
-		molcas_process=subprocess.Popen("%s  %s -o %s -b 1" % (molcas_exe,in_file,out_file),shell=True,close_fds=True)
-#		molcas_process=subprocess.Popen("%s  %s -f %s -b 1" % (molcas_exe,in_file,out_file),shell=True,close_fds=True)
+		#molcas_process=subprocess.Popen("%s  %s -o %s -b 1" % (molcas_exe,in_file,out_file),shell=True,close_fds=True)
+		cmd="sh " + submission_script + " "
+		# molcas_process=subprocess.Popen("%s  %s -o " % (cmd,project),stdout=subprocess.PIPE)
+		molcas_process=subprocess.Popen("%s  %s -o " % (cmd,project),shell=True,close_fds=True) #,stdout=subprocess.PIPE)
+		# molcas_process=subprocess.Popen("%s  %s -f %s -b 1" % (molcas_exe,in_file,out_file),shell=True,close_fds=True)
 	except subprocess.CalledProcessError as err:
 		raise err
 	return molcas_process
 
+def check_if_molcas_done(out_file):
+	f = open(out_file, 'r')
+	time.sleep(5)
+	line_temp=''
+	while True:
+
+		line = f.readline()
+		if not line :
+			time.sleep(2)
+			print('Nothing New')
+		else:
+			# print(line.split())
+			if len(line.split()) != 0 and line.split()[0] == "PAUSED":
+				molcas_WorkDir=line_temp.split()[0]
+				# print('MOLCAS ', line)
+				f.close()
+				return molcas_WorkDir
+			else:
+				line_temp=line
 
 
 if __name__ == '__main__':
+     
+        project = 'ls' 
+        neci_scratch_dir='/home/katukuri/work/Molcas/NiO/cas24in27/non-emb/NECI'
+        neci_out_file = 'out'
+        copy_to_molcas_workdir(project,neci_scratch_dir)
 
+        E = get_e(neci_out_file)
+        print(E)
+        """
 	cmd="export WorkDir=./"
 	subprocess.call("%s" % cmd,shell=True)
 
@@ -119,3 +180,4 @@ if __name__ == '__main__':
 #	exec_neci(project)
 #else:
 #	print('convergence reached')
+        """
