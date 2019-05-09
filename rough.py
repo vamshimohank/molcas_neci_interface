@@ -1,6 +1,7 @@
 from molcas_run import *
 
  # please set these variables
+interactive = False
 
 neci_scratch='/algpfs/katukuri/molcas_neci/'
 remote_ip='allogin2.fkf.mpg.de'
@@ -29,16 +30,23 @@ job_folder=str(os.getpid())
 neci_work_dir=neci_scratch+job_folder+'/'
 
 # run molcas submission script
-molcas_process = executeMolcas(molcas_submission_script,inp_file)
+#molcas_process = executeMolcas(molcas_submission_script,inp_file)
 MOLCAS_running=True
 
 while MOLCAS_running :
     MOLCAS_running = check_if_molcas_paused(out_file)
 
+    # print('Transferring FciInp and FciDmp to the remote computer {0}:{1} and submitting the job'.format(remote_ip,neci_WorkDir))
     job_id=run_neci_on_remote(project)
+    # print("Submiting the job to the queue ...")
     status = check_if_neci_completed(remote_ip,neci_work_dir,job_id)
 
     if status :
         get_rdms_from_neci(neci_work_dir)
+        if interactive :
+            try:
+                input("Continue with MOLCAS run? press any key")
+            except SyntaxError:
+                pass
     activate_molcas()
 

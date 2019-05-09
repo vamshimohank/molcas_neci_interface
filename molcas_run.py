@@ -30,7 +30,7 @@ def activate_molcas():
 	for line in f.readlines():
 		if string in line:
 			E=line.split()[8]
-			print(E)
+			print('CASCI E = ',E)
 			# return E
 			break
 	f.close()
@@ -111,12 +111,13 @@ def check_if_neci_completed(remote_ip,neci_work_dir,job_id):
 		sleep(10)
 		print('NECI is still running: {0}'.format(datetime.now()))
 	if if_file_exists_in_remote(remote_ip,file_name_with_full_path):
-		print('NECI is done, Send the RDMs to activate MOLCAS run?')
-		try:
-			input("Press enter to continue")
-			return True
-		except SyntaxError:
-			pass
+		print('NECI is done, getting the RDMs for MOLCAS to continue')
+		# print('NECI is done, Send the RDMs to activate MOLCAS run?')
+		# try:
+		# 	input("Press enter to continue")
+		# 	return True
+		# except SyntaxError:
+		# 	pass
            
 	return True
 
@@ -151,12 +152,12 @@ def get_rdms_from_neci(neci_WorkDir):
 		# c.run('mv out neci.out'.format(iter_folder))
 		c.run('rm TwoRDM*')
 		# iter += 1
-	try:
-		input("Continue with MOLCAS run? press any key")
-		c.close()
-	except SyntaxError:
-		c.close()
-		pass
+	# try:
+	# 	input("Continue with MOLCAS run? press any key")
+	# 	c.close()
+	# except SyntaxError:
+	# 	c.close()
+	# 	pass
 
 
 """
