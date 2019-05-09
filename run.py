@@ -1,4 +1,4 @@
-from molcas_neci_interface import *
+from molcas_neci_interface.molcas_neci_interface import *
 
  # please set these variables
 interactive = False

@@ -1,6 +1,4 @@
-from molcas_neci_interface import executeMolcas, check_if_molcas_done, exec_neci
-import subprocess, os
-import time
+from molcas_neci_interface.molcas_neci_interface import executeMolcas, check_if_molcas_done, exec_neci
 
 project = 'o2'
 inp_file=project+'.inp'
