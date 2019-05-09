@@ -12,15 +12,30 @@ if not sys.warnoptions:
     warnings.simplefilter("default") # Change the filter in this process
     os.environ["PYTHONWARNINGS"] = "ignore"
 
-def get_e(out_file):
-	f = open(out_file)
-	Pr = False
+def if_file_exists_in_remote(remote_ip,file_name_with_full_path):
+	from fabric import Connection
+	from patchwork.files import exists
+	# remote_ip=os.getenv('REMOTE_MACHINE_IP')
+	user=os.getenv('USER')
+	c=Connection(remote_ip,user=user)
+	if exists(c,file_name_with_full_path):
+		return True
+	else:
+		return False
+
+def activate_molcas():
+	molcas_WorkDir=os.getenv('MOLCAS_WorkDir')
+	f = open(molcas_WorkDir+'neci.out')
 	string='REDUCED DENSITY MATRICES'
 	for line in f.readlines():
 		if string in line:
 			E=line.split()[8]
-			return E
+			print(E)
+			# return E
 			break
+	f.close()
+	f = open(molcas_WorkDir+"NEWCYCLE","w+")
+	f.write(E)
 	f.close()
 
 def copy_to_molcas_workdir(project,neci_scratch_dir):
@@ -58,7 +73,8 @@ def run_neci_on_remote(project):
 
 	c=Connection(remote_ip,user=user)
 	print('Transferring FciInp and FciDmp to the remote computer {0}:{1}'.format(remote_ip,neci_WorkDir))
-	c.run('mkdir {0}'.format(neci_WorkDir))
+	if not if_file_exists_in_remote(remote_ip,neci_WorkDir):
+		c.run('mkdir {0}'.format(neci_WorkDir))
 	c.put(molcas_WorkDir+'/'+project+'.FciInp',remote=neci_WorkDir)
 	c.put(molcas_WorkDir+'/'+project+'.FciDmp',remote=neci_WorkDir)
 	c.put(CurrDir+'/'+neci_job_script,remote=neci_WorkDir)
@@ -72,8 +88,10 @@ def run_neci_on_remote(project):
 
 	# return neci_WorkDir
 
-def check_if_job_running(remote_ip,job_id):
+
+def check_if_neci_completed(remote_ip,neci_work_dir,job_id):
 	from time import sleep
+	from datetime import datetime
 	from fabric import Connection
 	c=Connection(remote_ip)
 	result=c.run('llq -j {0}'.format(job_id))
@@ -88,7 +106,20 @@ def check_if_job_running(remote_ip,job_id):
 		status=result.stdout.split()[19]
 	print('Job running ....')
 	print('checking if RDMs are created ....')
-	return status
+	file_name_with_full_path=neci_work_dir+'TwoRDM_aaaa.1'
+	while if_file_exists_in_remote(remote_ip,file_name_with_full_path) == False :
+		sleep(10)
+		print('NECI is still running: {0}'.format(datetime.now()))
+	if if_file_exists_in_remote(remote_ip,file_name_with_full_path):
+		print('NECI is done, Send the RDMs to activate MOLCAS run?')
+		try:
+			input("Press enter to continue")
+			return True
+		except SyntaxError:
+			pass
+           
+	return True
+
 
 def get_rdms_from_neci(neci_WorkDir):
 	from fabric import Connection
@@ -97,9 +128,11 @@ def get_rdms_from_neci(neci_WorkDir):
 	c=Connection(remote_ip,user=user)
 
 	molcas_WorkDir=os.getenv('MOLCAS_WorkDir')
-	remote_WorkDir=os.getenv('REMOTE_NECI_WorkDir')
+#	remote_WorkDir=os.getenv('REMOTE_NECI_WorkDir')
 	# neci_WorkDir=remote_WorkDir+job_folder+'/'
+	print('Copying RDMs and NECI output from')
 	print(neci_WorkDir)
+	print(' to ')
 	print(molcas_WorkDir)
 	c.get(neci_WorkDir+'TwoRDM_aaaa.1',local=molcas_WorkDir+'TwoRDM_aaaa.1') #,local=molcas_WorkDir)
 	c.get(neci_WorkDir+'TwoRDM_abab.1',local=molcas_WorkDir+'TwoRDM_abab.1')
@@ -108,39 +141,45 @@ def get_rdms_from_neci(neci_WorkDir):
 	c.get(neci_WorkDir+'TwoRDM_baba.1',local=molcas_WorkDir+'TwoRDM_baba.1')
 	c.get(neci_WorkDir+'TwoRDM_baab.1',local=molcas_WorkDir+'TwoRDM_baab.1')
 	c.get(neci_WorkDir+'out',local=molcas_WorkDir+'neci.out')
-	c.close
-
-def check_if_neci_is_done(neci_WorkDir):
-	from time import sleep
-
-	sleep(60)
-	while True:
-
-		line = f.readline()
-		if not line :
-			time.sleep(2)
-			print('MOLCAL log file not yet created!')
-		else:
-			# print(line.split())
-			if len(line.split()) != 0 and line.split()[0] == "PAUSED":
-				molcas_WorkDir=line_temp.split()[0]
-				# print('MOLCAS ', line)
-				f.close()
-				return molcas_WorkDir
-			else:
-				line_temp=line
+	c.close()
+	# iter=0
+	with c.cd(neci_WorkDir):
+		# iter_folder='Iter_'+str(iter)
+		# c.run('mkdir {0}'.format(iter_folder))
+		# c.run('mv TwoRDM* {0}'.format(iter_folder))
+		# c.run('mv out {0}/neci.out'.format(iter_folder))
+		# c.run('mv out neci.out'.format(iter_folder))
+		c.run('rm TwoRDM*')
+		# iter += 1
+	try:
+		input("Continue with MOLCAS run? press any key")
+		c.close()
+	except SyntaxError:
+		c.close()
+		pass
 
 
-def check_molcas_status(out_file):
+"""
+def activate_molcas():
+
 	import time
 	time.sleep(20)
+
+	molcas_WorkDir=os.getenv('MOLCAS_WorkDir')
+	out_file='neci.out'
+	E=get_e(molcas_WorkDir,out_file)
+"""
+
+
+"""
 	while 1:
 		line=str(subprocess.check_output("tail -1 %s" % out_file,shell=True))
 #		print(line)
 		if ("your_RDM_Energy" in line):
-			print("Perfoming CASSCI with NECI") 
+			print("Perfoming CASSCI with NECI")
 			break
 #        return neci
+"""
 
 def executeMolcas(submission_script,project):
 	try:
@@ -154,7 +193,7 @@ def executeMolcas(submission_script,project):
 		raise err
 	return molcas_process
 
-def check_if_molcas_done(out_file):
+def check_if_molcas_paused(out_file):
 	time.sleep(20)
 	f = open(out_file, 'r')
 	line_temp=''
@@ -170,7 +209,7 @@ def check_if_molcas_done(out_file):
 				molcas_WorkDir=line_temp.split()[0]
 				print('Files for NECI are produced', )
 				f.close()
-				return molcas_WorkDir
+				return True
 			else:
 				line_temp=line
 

@@ -24,17 +24,21 @@ os.environ['CurrDir']= currdir
 os.environ['PYTHONWARNINGS']='ignore'
 
 
-# run molcas submission script
-molcas_process = executeMolcas(molcas_submission_script,inp_file)
-molcas_WorkDir=check_if_molcas_done(out_file)
-
 # transfer files to remote/local machine to run NECI
 job_folder=str(os.getpid())
 neci_work_dir=neci_scratch+job_folder+'/'
 
-job_id=run_neci_on_remote(project)
-check_if_job_running(remote_ip,job_id)
-check_if_neci_is_done(neci_work_dir)
+# run molcas submission script
+molcas_process = executeMolcas(molcas_submission_script,inp_file)
+MOLCAS_running=True
 
-# check_if_neci_is_done(neci_WorkDir)
-# get_rdms_from_neci(neci_WorkDir)
+while MOLCAS_running :
+    MOLCAS_running = check_if_molcas_paused(out_file)
+
+    job_id=run_neci_on_remote(project)
+    status = check_if_neci_completed(remote_ip,neci_work_dir,job_id)
+
+    if status :
+        get_rdms_from_neci(neci_work_dir)
+    activate_molcas()
+

@@ -1,7 +1,8 @@
 from fabric import Connection
-# from fabric.runners import
+from fabric.runners import
 
 
+"""
 def log(msg):
     logfile=open("dummy.txt","a+")
     logfile.write(msg)
@@ -12,3 +13,4 @@ result=c.run('llq -j allogin2.35393.0')
 print(result.stdout.split()[19])
 
 #print()
+"""
