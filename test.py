@@ -1,4 +1,4 @@
-from molcas_run import executeMolcas, check_if_molcas_done, exec_neci
+from molcas_neci_interface import executeMolcas, check_if_molcas_done, exec_neci
 import subprocess, os
 import time
 
