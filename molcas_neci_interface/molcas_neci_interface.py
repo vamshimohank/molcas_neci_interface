@@ -19,11 +19,13 @@ def if_file_exists_in_remote(remote_ip,file_name_with_full_path):
 	user=os.getenv('USER')
 	c=Connection(remote_ip,user=user)
 	if exists(c,file_name_with_full_path):
+		c.close()
 		return True
 	else:
+		c.close()
 		return False
 
-def activate_molcas():
+def activate_molcas(iter):
 	molcas_WorkDir=os.getenv('MOLCAS_WorkDir')
 	f = open(molcas_WorkDir+'neci.out')
 	string='REDUCED DENSITY MATRICES'
@@ -105,32 +107,27 @@ def check_if_neci_completed(remote_ip,neci_work_dir,job_id):
 		result=c.run('llq -j {0}'.format(job_id))
 		status=result.stdout.split()[19]
 	print('Job running ....')
+	print('NECI is running: {0}'.format(datetime.now()))
 	print('checking if RDMs are created ....')
 	file_name_with_full_path=neci_work_dir+'TwoRDM_aaaa.1'
+	c.close()
 	while if_file_exists_in_remote(remote_ip,file_name_with_full_path) == False :
-		sleep(10)
-		print('NECI is still running: {0}'.format(datetime.now()))
+		sleep(20)
 	if if_file_exists_in_remote(remote_ip,file_name_with_full_path):
-		print('NECI is done, getting the RDMs for MOLCAS to continue')
-		# print('NECI is done, Send the RDMs to activate MOLCAS run?')
-		# try:
-		# 	input("Press enter to continue")
-		# 	return True
-		# except SyntaxError:
-		# 	pass
-           
+		print('NECI created RDMs, getting them for MOLCAS to continue')
+
 	return True
 
 
-def get_rdms_from_neci(neci_WorkDir):
+def get_rdms_from_neci(iter,job_folder):
 	from fabric import Connection
 	remote_ip=os.getenv('REMOTE_MACHINE_IP')
 	user=os.getenv('USER')
 	c=Connection(remote_ip,user=user)
 
 	molcas_WorkDir=os.getenv('MOLCAS_WorkDir')
-#	remote_WorkDir=os.getenv('REMOTE_NECI_WorkDir')
-	# neci_WorkDir=remote_WorkDir+job_folder+'/'
+	remote_WorkDir=os.getenv('REMOTE_NECI_WorkDir')
+	neci_WorkDir=remote_WorkDir+job_folder+'/'
 	print('Copying RDMs and NECI output from')
 	print(neci_WorkDir)
 	print(' to ')
@@ -145,12 +142,12 @@ def get_rdms_from_neci(neci_WorkDir):
 	c.close()
 	# iter=0
 	with c.cd(neci_WorkDir):
-		# iter_folder='Iter_'+str(iter)
-		# c.run('mkdir {0}'.format(iter_folder))
-		# c.run('mv TwoRDM* {0}'.format(iter_folder))
-		# c.run('mv out {0}/neci.out'.format(iter_folder))
-		# c.run('mv out neci.out'.format(iter_folder))
-		c.run('rm TwoRDM*')
+		iter_folder='Iter_'+str(iter)
+		c.run('mkdir {0}'.format(iter_folder))
+		c.run('mv TwoRDM* {0}'.format(iter_folder))
+		c.run('mv out {0}/neci.out'.format(iter_folder))
+		c.run('tar -cvf {0}.tar.gz {0}'.format(iter_folder,iter_folder))
+		# c.run('rm TwoRDM*')
 		# iter += 1
 	# try:
 	# 	input("Continue with MOLCAS run? press any key")
@@ -160,36 +157,14 @@ def get_rdms_from_neci(neci_WorkDir):
 	# 	pass
 
 
-"""
-def activate_molcas():
-
-	import time
-	time.sleep(20)
-
-	molcas_WorkDir=os.getenv('MOLCAS_WorkDir')
-	out_file='neci.out'
-	E=get_e(molcas_WorkDir,out_file)
-"""
-
-
-"""
-	while 1:
-		line=str(subprocess.check_output("tail -1 %s" % out_file,shell=True))
-#		print(line)
-		if ("your_RDM_Energy" in line):
-			print("Perfoming CASSCI with NECI")
-			break
-#        return neci
-"""
 
 def executeMolcas(submission_script,project):
+	import os
 	try:
-		#molcas_process=subprocess.Popen("%s  %s -o %s -b 1" % (molcas_exe,in_file,out_file),shell=True,close_fds=True)
 		cmd="sh " + submission_script + " "
-		# molcas_process=subprocess.Popen("%s  %s -o " % (cmd,project),stdout=subprocess.PIPE)
-		molcas_process=subprocess.Popen("%s  %s -o " % (cmd,project),shell=True,close_fds=True) #,stdout=subprocess.PIPE)
+		molcas_process=subprocess.Popen("%s  %s -o " % (cmd,project),shell=True,close_fds=True,preexec_fn=os.setsid) #,stdout=subprocess.PIPE)
+		# molcas_process=subprocess.Popen("%s  %s -o " % (cmd,project),close_fds=True)
 		print('MOLCAS running ...')
-		# molcas_process=subprocess.Popen("%s  %s -f %s -b 1" % (molcas_exe,in_file,out_file),shell=True,close_fds=True)
 	except subprocess.CalledProcessError as err:
 		raise err
 	return molcas_process
@@ -202,8 +177,8 @@ def check_if_molcas_paused(out_file):
 
 		line = f.readline()
 		if not line :
-			time.sleep(2)
-			print('Nothing New')
+			time.sleep(10)
+			# print('Nothing New')
 		else:
 			# print(line.split())
 			if len(line.split()) != 0 and line.split()[0] == "PAUSED":
@@ -214,6 +189,8 @@ def check_if_molcas_paused(out_file):
 			else:
 				line_temp=line
 
+def analyse_neci():
+	print("Analyzing NECI output")
 
 if __name__ == '__main__':
      
@@ -224,54 +201,3 @@ if __name__ == '__main__':
 
         E = get_e(neci_out_file)
         print(E)
-        """
-	cmd="export WorkDir=./"
-	subprocess.call("%s" % cmd,shell=True)
-
-	neci_scratch_dir="./NECI"
-	if not os.path.exists(neci_scratch_dir):
-		os.makedirs(neci_scratch_dir)
-
-	molcas_exe='/home/katukuri/bin/pymolcas'
-
-#molcas_exe='/home/katukuri/bin/molcas'
-#fciqmc_exe='srun /home/katukuri/software/FIDIS/NECI_STABLE/build_new/bin/neci'
-#fciqmc_exe='srun /home/katukuri/software/FIDIS/NECI_STABLE/build_deprecated/bin/neci'
-	fciqmc_exe='srun /home/katukuri/software/DENEB/NECI_STABLE/build/bin/neci'
-
-#project=sys.argv[1]
-	project='hs_neci'
-	in_file = project+'.inp'
-	out_file = project+'.out'
-# RUN Molcas
-	molcas_process=executeMolcas(in_file,out_file)
-	if molcas_process.poll() == None:
-		print("Running MOLCAS")
-
-	while molcas_process.poll() == None:
-		check_molcas_status(out_file)
-		E=exec_neci(neci_scratch_dir,project)
-		print('NECI RDM Energy=%s' % E)
-		subprocess.call("echo %s > NEWCYCLE" % E, shell=True)
-#		print('copying files for molcas to read')
-#		subprocess.call("mv TwoRDM_aaaa.1 %s.TwoRDM_aaaa" % project, shell=True)
-#		subprocess.call("mv TwoRDM_abab.1 %s.TwoRDM_abab" % project, shell=True)
-#		subprocess.call("mv TwoRDM_abba.1 %s.TwoRDM_abba" % project, shell=True)
-#		subprocess.call("mv OneRDM.1 %s.OneRDM" % project, shell=True)
-#		subprocess.call("echo %s > NEWCYCLE" % E, shell=True)
-#		time.sleep(1)
-#		print('deleating NEWCYCLE')
-#		subprocess.call("rm NEWCYCLE",shell=True)
-
-#ras_macro_iter=int(subprocess.check_output("grep 'Maximum number of macro iterations' %s|awk '{print $6}'" % out_file,shell=True))
-
-	# check if molcas has reached the 1st iteration
-#if macro_iter < max_macro_iter:
-#	neci=check_molcas_status(out_file)
-
-	#Run NECI
-#if neci=='yes':
-#	exec_neci(project)
-#else:
-#	print('convergence reached')
-        """
