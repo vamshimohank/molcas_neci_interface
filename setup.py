@@ -10,3 +10,4 @@ setup(
     author_email='',
     description=''
 )
+    #packages=['molcas_neci_interface','plotting'],
