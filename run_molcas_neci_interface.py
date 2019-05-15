@@ -3,6 +3,7 @@ from molcas_neci_interface.molcas_neci_interface import *
 import argparse
 import os, signal
  # Command-line arguments
+from molcas_neci_interface.molcas_neci_interface import get_rdms_from_neci
 
 parser = argparse.ArgumentParser(formatter_class=lambda prog: argparse.HelpFormatter(prog,max_help_position=42,width=120))
 parser.add_argument('-i', '--interactive', help='Interactive run: you have to provide input if the molcas needs to be continued', action='store_true')
@@ -41,6 +42,7 @@ out_file = project+'.log'
 os.environ['REMOTE_MACHINE_IP'] = remote_ip
 os.environ['REMOTE_NECI_WorkDir'] = neci_scratch
 os.environ['NECI_JOB_SCRIPT'] = neci_job_script
+os.environ['WorkDir'] = Molcas_WorkDir
 os.environ['MOLCAS_WorkDir'] = Molcas_WorkDir
 os.environ['CurrDir']= currdir
 os.environ['PYTHONWARNINGS']='ignore'
@@ -50,16 +52,17 @@ os.environ['PYTHONWARNINGS']='ignore'
 job_folder=str(os.getpid())
 neci_work_dir=neci_scratch+job_folder+'/'
 
+
 # run molcas submission script
-molcas_process = executeMolcas(molcas_submission_script,inp_file)
+molcas_process = executeMolcas(inp_file)
 MOLCAS_running=True
 
+iter = 0
 while MOLCAS_running :
     MOLCAS_running = check_if_molcas_paused(out_file)
 
     job_id=run_neci_on_remote(project)
     status = check_if_neci_completed(remote_ip,neci_work_dir,job_id)
-    iter = 0
     if status :
         get_rdms_from_neci(iter,job_folder)
         if interactive :
@@ -79,6 +82,6 @@ while MOLCAS_running :
             except SyntaxError:
                 pass
         else:
-            activate_molcas(iter)
-        iter += 1
+            activate_molcas()
+            iter += 1
 
