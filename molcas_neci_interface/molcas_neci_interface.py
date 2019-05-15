@@ -190,7 +190,7 @@ def check_if_molcas_paused(out_file):
         else:
             # print(line.split())
             if len(line.split()) != 0 and line.split()[0] == "PAUSED":
-                molcas_WorkDir = line_temp.split()[0]
+                # molcas_WorkDir = line_temp.split()[0]
                 print('Files for NECI are produced',)
                 f.close()
                 return True

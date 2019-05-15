@@ -1,4 +1,5 @@
 from molcas_neci_interface.molcas_neci_interface import *
+import time
 
 import argparse
 import os, signal
@@ -12,11 +13,11 @@ parser.usage = '{0} [options] [input_file | script ...]'.format(parser.prog)
 
 args = vars(parser.parse_args())
 
-if (not args['filename']):
-    # parser.description = 'MOLCAS has been found at {0}'.format(Molcas.molcas)
-    parser.print_help()
+# if (not args['filename']):
+#     parser.description = 'MOLCAS has been found at {0}'.format(Molcas.molcas)
+    # parser.print_help()
     # return(0)
-    exit()
+    # exit()
 
 
  # please set these variables
@@ -59,29 +60,38 @@ MOLCAS_running=True
 
 iter = 0
 while MOLCAS_running :
-    MOLCAS_running = check_if_molcas_paused(out_file)
+    try :
+        MOLCAS_running = check_if_molcas_paused(out_file)
 
-    job_id=run_neci_on_remote(project)
-    status = check_if_neci_completed(remote_ip,neci_work_dir,job_id)
-    if status :
-        get_rdms_from_neci(iter,job_folder)
-        if interactive :
-            try:
-                inp_val = input("Continue with MOLCAS run? y/N \n ")
-                if inp_val.split()[0] == 'N' or inp_val.split()[0] == 'n':
-                    inp_molcas_run = input("(a) Abort MOLCAS ?  \n"
-                                           "(b) Analyse NECI OUTPUT \n")
-                    if inp_molcas_run.split()[0] == 'a' :
-                        os.killpg(os.getpgid(molcas_process.pid), signal.SIGTERM)
-                        molcas_process.kill()
-                        exit()
-                    elif inp_molcas_run.split()[0] == 'b':
-                        analyse_neci()
-                elif inp_val.split()[0] == 'Y' or inp_val.split()[0] == 'y':
-                    activate_molcas()
-            except SyntaxError:
-                pass
-        else:
-            activate_molcas()
-            iter += 1
+        job_id=run_neci_on_remote(project)
+        status = check_if_neci_completed(remote_ip,neci_work_dir,job_id)
+        if status :
+            get_rdms_from_neci(iter,job_folder)
+            if interactive :
+                try:
+                    inp_val = input("Continue with MOLCAS run? y/N \n ")
+                    if inp_val.split()[0] == 'N' or inp_val.split()[0] == 'n':
+                        inp_molcas_run = input("(a) Abort MOLCAS ?  \n"
+                                               "(b) Analyse NECI OUTPUT \n")
+                        if inp_molcas_run.split()[0] == 'a' :
+                            os.killpg(os.getpgid(molcas_process.pid), signal.SIGTERM)
+                            # molcas_process.kill()
+                            exit()
+                        elif inp_molcas_run.split()[0] == 'b':
+                            analyse_neci()
+                    elif inp_val.split()[0] == 'Y' or inp_val.split()[0] == 'y':
+                        activate_molcas()
+                except SyntaxError:
+                    pass
+            else:
+                activate_molcas()
+                iter += 1
+    except KeyboardInterrupt :
+        print('\n killing molcas subprocess')
+        os.killpg(os.getpgid(molcas_process.pid), signal.SIGTERM)
+        # print('Sending llcancel command to the remote machine')
+        MOLCAS_running=False
+        time.sleep(3)
+        #molcas_process.kill()
+        exit()
 
