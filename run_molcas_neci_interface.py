@@ -8,16 +8,16 @@ from molcas_neci_interface.molcas_neci_interface import get_rdms_from_neci
 
 parser = argparse.ArgumentParser(formatter_class=lambda prog: argparse.HelpFormatter(prog,max_help_position=42,width=120))
 parser.add_argument('-i', '--interactive', help='Interactive run: you have to provide input if the molcas needs to be continued', action='store_true')
-parser.add_argument('filename', help='script to run molcas locally', nargs='?', metavar='input_file | script')
+parser.add_argument('project', help='project name', nargs='?', metavar='project name | script')
 parser.usage = '{0} [options] [input_file | script ...]'.format(parser.prog)
 
 args = vars(parser.parse_args())
 
-# if (not args['filename']):
-#     parser.description = 'MOLCAS has been found at {0}'.format(Molcas.molcas)
-    # parser.print_help()
+if (not args['project']):
+    parser.description = 'MOLCAS has been found at {0}'.format(Molcas.molcas)
+    parser.print_help()
     # return(0)
-    # exit()
+    exit()
 
 
  # please set these variables
@@ -32,7 +32,7 @@ neci_job_script='neci_submit.job'
 Molcas_WorkDir=os.getcwd()+'/tmp/'
 currdir = os.getcwd()
 
-project='o2'
+project=args['project']
 molcas_submission_script = 'run_molcas.sh' # a bash script on local PC
 
 # molcas project details
@@ -47,6 +47,7 @@ os.environ['WorkDir'] = Molcas_WorkDir
 os.environ['MOLCAS_WorkDir'] = Molcas_WorkDir
 os.environ['CurrDir']= currdir
 os.environ['PYTHONWARNINGS']='ignore'
+os.environ['batch']='llq'
 
 
 # transfer files to remote/local machine to run NECI
@@ -61,9 +62,9 @@ MOLCAS_running=True
 iter = 0
 while MOLCAS_running :
     try :
-        MOLCAS_running = check_if_molcas_paused(out_file)
+        MOLCAS_running = check_if_molcas_paused(out_file,molcas_runtime=60)
 
-        job_id=run_neci_on_remote(project)
+        job_id=run_neci_on_remote(project,iter)
         status = check_if_neci_completed(remote_ip,neci_work_dir,job_id)
         if status :
             get_rdms_from_neci(iter,job_folder)

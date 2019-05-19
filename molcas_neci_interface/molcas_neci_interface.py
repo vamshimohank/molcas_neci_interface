@@ -15,7 +15,6 @@ if not sys.warnoptions:
 
 
 def if_file_exists_in_remote(remote_ip, file_name_with_full_path):
-    from fabric import Connection
     from paramiko_helper.ssh_helper import SFTPHelper
     import os
     user = os.getenv('USER')
@@ -24,13 +23,9 @@ def if_file_exists_in_remote(remote_ip, file_name_with_full_path):
     c=SFTPHelper()
     ssh_args={"password":password, "username": user}
     c.connect(remote_ip,**ssh_args)
-    #from patchwork.files import exists
-    #c = Connection(remote_ip, user=user, connect_kwargs={"password": password, "timeout": 3600})
     if c.exists(file_name_with_full_path):
-        #c.close()
         return True
     else:
-        #c.close()
         return False
 
 
@@ -127,9 +122,9 @@ def run_neci_on_remote(project,iter):
     c.put(CurrDir + '/' + neci_job_script, remote=neci_WorkDir)
     print("Submiting the job to the queue ...")
     with c.cd(neci_WorkDir):
-        if os.getenv('batch') == 'llq':
+        if os.getenv('scheduler') == 'llq':
             job_submit_line = c.run('llsubmit {0}'.format(neci_job_script))
-        elif os.getenv('batch') == 'slurm':
+        elif os.getenv('scheduler') == 'slurm':
             job_submit_line = c.run('sbatch {0}'.format(neci_job_script))
     job_id = job_submit_line.stdout.split()[3]
     # sys.stdout.write(job_submit_line)
@@ -137,19 +132,20 @@ def run_neci_on_remote(project,iter):
     return job_id
 
 
-def check_if_neci_completed(remote_ip, neci_work_dir, job_id):
+def check_if_neci_completed(neci_work_dir, job_id):
     from time import sleep
     from datetime import datetime
     from fabric import Connection
+    remote_ip = os.getenv('REMOTE_MACHINE_IP')
     user = os.getenv('USER')
     password = os.getenv('PASSWORD')
     # print(password)
     c = Connection(remote_ip, user=user, connect_kwargs={"password": password})
     # c = Connection(remote_ip)
-    if os.getenv('batch') == "llq":
+    if os.getenv('scheduler') == "llq":
         result = c.run('llq -j {0}'.format(job_id))
         status = result.stdout.split()[19]
-    if os.getenv('batch') == "slurm":
+    if os.getenv('scheduler') == "slurm":
         result = c.run('squeue -j {0}'.format(job_id))
         status = result.stdout.split()[4]
     while status != "R":
@@ -159,10 +155,10 @@ def check_if_neci_completed(remote_ip, neci_work_dir, job_id):
             print('Job waiting in queue')
         sleep(10)
         try:
-            if os.getenv('batch') == "llq":
+            if os.getenv('scheduler') == "llq":
                 result = c.run('llq -j {0} '.format(job_id))
                 status = result.stdout.split()[19]
-            if os.getenv('batch') == "slurm":
+            if os.getenv('scheduler') == "slurm":
                 result = c.run('squeue -j {0} '.format(job_id))
                 status = result.stdout.split()[12]
         except IndexError:
@@ -230,7 +226,6 @@ def executeMolcas(inp_file):
     import os
     try:
         cmd = "pymolcas -new -f -b1 "
-        # cmd = "sh " + submission_script + " "
         molcas_process = subprocess.Popen("%s  %s " % (cmd, inp_file), shell=True, close_fds=True,
                                           preexec_fn=os.setsid)
         print('MOLCAS running ...')
@@ -238,27 +233,22 @@ def executeMolcas(inp_file):
         raise err
     return molcas_process
 
-
-def check_if_molcas_paused(out_file):
-    time.sleep(20)
+def check_if_molcas_paused(out_file,molcas_runtime=20):
+    time.sleep(molcas_runtime)
     f = open(out_file, 'r')
     line_temp = ''
     while True:
-
         line = f.readline()
         if not line:
-            time.sleep(10)
-        # print('Nothing New')
+            time.sleep(molcas_runtime)
         else:
-            # print(line.split())
             if len(line.split()) != 0 and line.split()[0] == "PAUSED":
                 # molcas_WorkDir = line_temp.split()[0]
                 print('Files for NECI are produced', )
                 f.close()
                 return True
             else:
-                line_temp = line
-
+                pass
 
 def analyse_neci():
     import subprocess
