@@ -2,35 +2,16 @@ import errno
 import os.path
 
 import paramiko
-
 class SFTPHelper(object):
-    import errno
-    import os.path
-    import paramiko
-
 
     def connect(self, hostname, **ssh_kwargs):
         """Create a ssh client and a sftp client
 
         **ssh_kwargs are passed directly to paramiko.SSHClient.connect()
         """
-
-        self.ssh_config_file = os.path.expanduser("~/.ssh/config")
-        #print(self.ssh_config_file)
-        self.ssh_config = paramiko.SSHConfig()
-        if os.path.exists(self.ssh_config_file):
-            with open(self.ssh_config_file) as f:
-                self.ssh_config.parse(f)
-        self.user_config = self.ssh_config.lookup(hostname)
-        #print(self.user_config)
-        if 'proxycommand' in self.user_config:
-            ssh_kwargs['sock'] = paramiko.ProxyCommand(self.user_config['proxycommand'])
-        #print(ssh_kwargs)
-
         self.sshclient = paramiko.SSHClient()
         self.sshclient.load_system_host_keys()
         self.sshclient.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        #self.user_config = ssh_config.lookup(hostname)
         self.sshclient.connect(hostname, **ssh_kwargs)
         self.sftpclient = self.sshclient.open_sftp()
 
