@@ -1,3 +1,4 @@
+from __future__ import print_function
 import sys, shutil, os
 from typing import BinaryIO
 
@@ -15,15 +16,21 @@ if not sys.warnoptions:
 
 def if_file_exists_in_remote(remote_ip, file_name_with_full_path):
     from fabric import Connection
-    from patchwork.files import exists
-    # remote_ip=os.getenv('REMOTE_MACHINE_IP')
+    from paramiko_helper.ssh_helper import SFTPHelper
+    import os
     user = os.getenv('USER')
-    c = Connection(remote_ip, user=user)
-    if exists(c, file_name_with_full_path):
-        c.close()
+    password = os.getenv('PASSWORD')
+
+    c=SFTPHelper()
+    ssh_args={"password":password, "username": user}
+    c.connect(remote_ip,**ssh_args)
+    #from patchwork.files import exists
+    #c = Connection(remote_ip, user=user, connect_kwargs={"password": password, "timeout": 3600})
+    if c.exists(file_name_with_full_path):
+        #c.close()
         return True
     else:
-        c.close()
+        #c.close()
         return False
 
 
@@ -34,13 +41,41 @@ def activate_molcas():
     for line in f.readlines():
         if string in line:
             E = line.split()[8]
-            print('CASCI E = ', E)
+            try:
+                print('CASCI E = ', E)
+            except UnboundLocalError:
+                print("Although the RDMs are found, there is no Energy printed in the NECI out file.\n"
+                      "Looks like that NECI did not finish clean. Please check the NECI out file")
+                print("Exiting the program: please restart MOLCAS with the lastest orbitals to continue the CASSCF\n "
+                      "calculation")
+                exit()
             # return E
             break
     f.close()
     f = open(molcas_WorkDir + "NEWCYCLE", 'w+')  # type: file
     f.write(E)
     f.close()
+    return None
+
+
+def replace_definedet(project):
+    molcas_WorkDir = os.getenv('MOLCAS_WorkDir')
+    f = open(molcas_WorkDir + 'neci.out')
+    definedet=''
+    for line in f.readlines():
+        if 'definedet' in line:
+            definedet = line
+            print(definedet)
+            # break
+    f.close()
+
+    neci_inp_file_path = molcas_WorkDir + project + '.FciInp'
+    import fileinput
+    for line in fileinput.FileInput(neci_inp_file_path, inplace=1):
+        # if "calc" in line:
+        if len(line.split()) == 1 and 'calc' in line.split()[0][:4]:
+            line = line.replace(line, line + definedet+'\n')
+        print(line, end='')
 
 
 def copy_to_molcas_workdir(project, neci_scratch_dir):
@@ -56,12 +91,10 @@ def copy_to_main_dir(project, neci_scratch_dir):
     shutil.copyfile(os.path.join(neci_scratch_dir, 'OneRDM.1'), './' + project + '.OneRDM')
 
 
-def run_neci_on_remote(project):
+def run_neci_on_remote(project,iter):
     from fabric import Connection
 
-    import sys
-
-    import os
+    import sys,os
 
     if not sys.warnoptions:
         import os, warnings
@@ -77,7 +110,15 @@ def run_neci_on_remote(project):
     job_folder = str(os.getpid())
     neci_WorkDir = remote_WorkDir + job_folder + '/'
 
-    c = Connection(remote_ip, user=user)
+    # replace the definedet line in the neci input
+    if iter >= 1:
+        replace_definedet(project)
+
+    # c = Connection(remote_ip, user=user)
+    user = os.getenv('USER')
+    password = os.getenv('PASSWORD')
+    # print(password)
+    c = Connection(remote_ip, user=user, connect_kwargs={"password": password})
     print('Transferring FciInp and FciDmp to the remote computer {0}:{1}'.format(remote_ip, neci_WorkDir))
     if not if_file_exists_in_remote(remote_ip, neci_WorkDir):
         c.run('mkdir {0}'.format(neci_WorkDir))
@@ -86,7 +127,10 @@ def run_neci_on_remote(project):
     c.put(CurrDir + '/' + neci_job_script, remote=neci_WorkDir)
     print("Submiting the job to the queue ...")
     with c.cd(neci_WorkDir):
-        job_submit_line = c.run('llsubmit {0}'.format(neci_job_script))
+        if os.getenv('batch') == 'llq':
+            job_submit_line = c.run('llsubmit {0}'.format(neci_job_script))
+        elif os.getenv('batch') == 'slurm':
+            job_submit_line = c.run('sbatch {0}'.format(neci_job_script))
     job_id = job_submit_line.stdout.split()[3]
     # sys.stdout.write(job_submit_line)
     c.close()
@@ -97,19 +141,34 @@ def check_if_neci_completed(remote_ip, neci_work_dir, job_id):
     from time import sleep
     from datetime import datetime
     from fabric import Connection
-    c = Connection(remote_ip)
-    result = c.run('llq -j {0}'.format(job_id))
-    status = result.stdout.split()[19]
+    user = os.getenv('USER')
+    password = os.getenv('PASSWORD')
+    # print(password)
+    c = Connection(remote_ip, user=user, connect_kwargs={"password": password})
+    # c = Connection(remote_ip)
+    if os.getenv('batch') == "llq":
+        result = c.run('llq -j {0}'.format(job_id))
+        status = result.stdout.split()[19]
+    if os.getenv('batch') == "slurm":
+        result = c.run('squeue -j {0}'.format(job_id))
+        status = result.stdout.split()[4]
     while status != "R":
-        if status == "I":
+        if status == "I" or status == "PD":
             print('Job waiting in queue')
         if status == "I":
             print('Job waiting in queue')
         sleep(10)
-        result = c.run('llq -j {0}'.format(job_id))
-        status = result.stdout.split()[19]
-    print('Job running ....')
-    print('NECI is running: {0}'.format(datetime.now()))
+        try:
+            if os.getenv('batch') == "llq":
+                result = c.run('llq -j {0} '.format(job_id))
+                status = result.stdout.split()[19]
+            if os.getenv('batch') == "slurm":
+                result = c.run('squeue -j {0} '.format(job_id))
+                status = result.stdout.split()[12]
+        except IndexError:
+            status = "R"
+    print('Job running ... or killed as soon as it started! ')
+    # print('NECI is running: {0}'.format(datetime.now()))
     print('checking if RDMs are created ....')
     file_name_with_full_path = neci_work_dir + 'TwoRDM_aaaa.1'
     c.close()
@@ -125,7 +184,9 @@ def get_rdms_from_neci(iter, job_folder):
     from fabric import Connection
     remote_ip = os.getenv('REMOTE_MACHINE_IP')
     user = os.getenv('USER')
-    c = Connection(remote_ip, user=user)
+    password = os.getenv('PASSWORD')
+    # print(password)
+    c = Connection(remote_ip, user=user, connect_kwargs={"password": password})
 
     molcas_WorkDir = os.getenv('MOLCAS_WorkDir')
     remote_WorkDir = os.getenv('REMOTE_NECI_WorkDir')
@@ -147,6 +208,7 @@ def get_rdms_from_neci(iter, job_folder):
         c.run('mkdir {0}'.format(iter_folder))
         c.run('mv TwoRDM* {0}'.format(iter_folder))
         c.run('mv out {0}/neci.out'.format(iter_folder))
+        c.run('mv input {0}/neci.inp'.format(iter_folder))
         c.run('cp FCIMCStats {0}/.'.format(iter_folder))
         c.run('tar -cf {0}.tar.gz {0}'.format(iter_folder, iter_folder))
     c.get(neci_WorkDir + iter_folder + '.tar.gz', local=molcas_WorkDir + iter_folder + '.tar.gz')
@@ -191,7 +253,7 @@ def check_if_molcas_paused(out_file):
             # print(line.split())
             if len(line.split()) != 0 and line.split()[0] == "PAUSED":
                 # molcas_WorkDir = line_temp.split()[0]
-                print('Files for NECI are produced',)
+                print('Files for NECI are produced', )
                 f.close()
                 return True
             else:
@@ -199,7 +261,18 @@ def check_if_molcas_paused(out_file):
 
 
 def analyse_neci():
+    import subprocess
+    import tarfile
+    import numpy as np
+
+    iter = 0
+    tar = tarfile.open("Iter_" + str(iter) + '.tar.gz', "r:gz")
+    FCIMCstats = tar.ge
+
     print("Analyzing NECI output")
+    molcas_WorkDir = os.getenv('MOLCAS_WorkDir')
+    plot_script = input('Enter the python plotting program')
+    subprocess.Popen('python', plot_script)
 
 
 if __name__ == '__main__':
