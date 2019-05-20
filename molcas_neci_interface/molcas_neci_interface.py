@@ -17,16 +17,22 @@ if not sys.warnoptions:
 def if_file_exists_in_remote(remote_ip, file_name_with_full_path):
     from paramiko_helper.ssh_helper import SFTPHelper
     import os
-    user = os.getenv('USER')
-    password = os.getenv('PASSWORD')
+    try :
+        user = os.getenv('USER')
+        password = os.getenv('PASSWORD')
 
-    c=SFTPHelper()
-    ssh_args={"password":password, "username": user}
-    c.connect(remote_ip,**ssh_args)
-    if c.exists(file_name_with_full_path):
-        return True
-    else:
-        return False
+        c=SFTPHelper()
+        ssh_args={"password":password, "username": user, "auth_timeout": 3600.0, "banner_timeout": 3600.0, "timeout": 3600.0}
+        c.connect(remote_ip,**ssh_args)
+        if c.exists(file_name_with_full_path):
+            return True
+        else:
+            return False
+    except KeyboardInterrupt:
+        exit()
+
+def reread_inp():
+    print("Reread the input parameters")
 
 
 def activate_molcas():
@@ -170,8 +176,8 @@ def check_if_neci_completed(neci_work_dir, job_id):
     c.close()
     while if_file_exists_in_remote(remote_ip, file_name_with_full_path) == False:
         sleep(20)
-    if if_file_exists_in_remote(remote_ip, file_name_with_full_path):
-        print('NECI created RDMs, getting them for MOLCAS to continue')
+    # if if_file_exists_in_remote(remote_ip, file_name_with_full_path):
+    print('NECI created RDMs, getting them for MOLCAS to continue')
 
     return True
 
@@ -197,6 +203,7 @@ def get_rdms_from_neci(iter, job_folder):
     c.get(neci_WorkDir + 'TwoRDM_bbbb.1', local=molcas_WorkDir + 'TwoRDM_bbbb.1')
     c.get(neci_WorkDir + 'TwoRDM_baba.1', local=molcas_WorkDir + 'TwoRDM_baba.1')
     c.get(neci_WorkDir + 'TwoRDM_baab.1', local=molcas_WorkDir + 'TwoRDM_baab.1')
+    time.sleep(30)
     c.get(neci_WorkDir + 'out', local=molcas_WorkDir + 'neci.out')
     # iter=0
     with c.cd(neci_WorkDir):
@@ -244,7 +251,7 @@ def check_if_molcas_paused(out_file,molcas_runtime=20):
         else:
             if len(line.split()) != 0 and line.split()[0] == "PAUSED":
                 # molcas_WorkDir = line_temp.split()[0]
-                print('Files for NECI are produced', )
+                print('MOLCAS paused and files for NECI are produced', )
                 f.close()
                 return True
             else:
