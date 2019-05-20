@@ -66,8 +66,7 @@ def replace_definedet(project):
     for line in f.readlines():
         if 'definedet' in line:
             definedet = line
-            print(definedet)
-            # break
+            # print(definedet)
     f.close()
 
     neci_inp_file_path = molcas_WorkDir + project + '.FciInp'
@@ -118,22 +117,25 @@ def run_neci_on_remote(project,iter):
     # c = Connection(remote_ip, user=user)
     user = os.getenv('USER')
     password = os.getenv('PASSWORD')
-    # print(password)
     c = Connection(remote_ip, user=user, connect_kwargs={"password": password})
+
     print('Transferring FciInp and FciDmp to the remote computer {0}:{1}'.format(remote_ip, neci_WorkDir))
+
     if not if_file_exists_in_remote(remote_ip, neci_WorkDir):
         c.run('mkdir {0}'.format(neci_WorkDir))
     c.put(molcas_WorkDir + '/' + project + '.FciInp', remote=neci_WorkDir)
     c.put(molcas_WorkDir + '/' + project + '.FciDmp', remote=neci_WorkDir)
     c.put(CurrDir + '/' + neci_job_script, remote=neci_WorkDir)
+
     print("Submiting the job to the queue ...")
+
     with c.cd(neci_WorkDir):
         if os.getenv('scheduler') == 'llq':
             job_submit_line = c.run('llsubmit {0}'.format(neci_job_script))
         elif os.getenv('scheduler') == 'slurm':
             job_submit_line = c.run('sbatch {0}'.format(neci_job_script))
     job_id = job_submit_line.stdout.split()[3]
-    # sys.stdout.write(job_submit_line)
+
     c.close()
     return job_id
 
@@ -145,7 +147,6 @@ def check_if_neci_completed(neci_work_dir, job_id):
     remote_ip = os.getenv('REMOTE_MACHINE_IP')
     user = os.getenv('USER')
     password = os.getenv('PASSWORD')
-    # print(password)
     c = Connection(remote_ip, user=user, connect_kwargs={"password": password})
     # c = Connection(remote_ip)
     if os.getenv('scheduler') == "llq":
@@ -159,7 +160,7 @@ def check_if_neci_completed(neci_work_dir, job_id):
             print('Job waiting in queue')
         if status == "I":
             print('Job waiting in queue')
-        sleep(10)
+        sleep(15)
         try:
             if os.getenv('scheduler') == "llq":
                 result = c.run('llq -j {0} '.format(job_id))
@@ -168,16 +169,17 @@ def check_if_neci_completed(neci_work_dir, job_id):
                 result = c.run('squeue -j {0} '.format(job_id))
                 status = result.stdout.split()[12]
         except IndexError:
+            print('Either job killed as soon as it started or its done! ')
             status = "R"
-    print('Job running ... or killed as soon as it started! ')
-    # print('NECI is running: {0}'.format(datetime.now()))
-    print('checking if RDMs are created ....')
-    file_name_with_full_path = neci_work_dir + 'TwoRDM_aaaa.1'
     c.close()
+    # print('Job running ... ')
+    # print('NECI is running: {0}'.format(datetime.now()))
+    print('Job is running, checking if RDMs are created ....')
+    file_name_with_full_path = neci_work_dir + 'TwoRDM_aaaa.1'
     while if_file_exists_in_remote(remote_ip, file_name_with_full_path) == False:
-        sleep(20)
+        sleep(60)
     # if if_file_exists_in_remote(remote_ip, file_name_with_full_path):
-    print('NECI created RDMs, getting them for MOLCAS to continue')
+    print('NECI created RDMs, transfering to MOLCAS work directory ')
 
     return True
 
