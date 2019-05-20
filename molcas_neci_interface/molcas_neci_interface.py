@@ -25,8 +25,10 @@ def if_file_exists_in_remote(remote_ip, file_name_with_full_path):
         ssh_args={"password":password, "username": user, "auth_timeout": 3600.0, "banner_timeout": 3600.0, "timeout": 3600.0}
         c.connect(remote_ip,**ssh_args)
         if c.exists(file_name_with_full_path):
+            c.close()
             return True
         else:
+            c.close()
             return False
     except KeyboardInterrupt:
         exit()
@@ -140,7 +142,7 @@ def run_neci_on_remote(project,iter):
     return job_id
 
 
-def check_if_neci_completed(neci_work_dir, job_id):
+def check_if_neci_completed(neci_work_dir, job_id, interactive):
     from time import sleep
     from datetime import datetime
     from fabric import Connection
@@ -149,34 +151,41 @@ def check_if_neci_completed(neci_work_dir, job_id):
     password = os.getenv('PASSWORD')
     c = Connection(remote_ip, user=user, connect_kwargs={"password": password})
     # c = Connection(remote_ip)
-    if os.getenv('scheduler') == "llq":
-        result = c.run('llq -j {0}'.format(job_id))
-        status = result.stdout.split()[19]
-    if os.getenv('scheduler') == "slurm":
-        result = c.run('squeue -j {0}'.format(job_id))
-        status = result.stdout.split()[4]
-    while status != "R":
-        if status == "I" or status == "PD":
-            print('Job waiting in queue')
-        if status == "I":
-            print('Job waiting in queue')
-        sleep(15)
-        try:
-            if os.getenv('scheduler') == "llq":
-                result = c.run('llq -j {0} '.format(job_id))
-                status = result.stdout.split()[19]
-            if os.getenv('scheduler') == "slurm":
-                result = c.run('squeue -j {0} '.format(job_id))
-                status = result.stdout.split()[12]
-        except IndexError:
-            print('Either job killed as soon as it started or its done! ')
-            status = "R"
-    c.close()
-    # print('Job running ... ')
-    # print('NECI is running: {0}'.format(datetime.now()))
-    print('Job is running, checking if RDMs are created ....')
-    file_name_with_full_path = neci_work_dir + 'TwoRDM_aaaa.1'
-    while if_file_exists_in_remote(remote_ip, file_name_with_full_path) == False:
+    if not interactive:
+        if os.getenv('scheduler') == "llq":
+            result = c.run('llq -j {0}'.format(job_id))
+            status = result.stdout.split()[19]
+        if os.getenv('scheduler') == "slurm":
+            result = c.run('squeue -j {0}'.format(job_id))
+            status = result.stdout.split()[4]
+        if status != "R":
+            while status != "R":
+                if status == "I" or status == "PD":
+                    print('Job waiting in queue')
+                sleep(15)
+                try:
+                    if os.getenv('scheduler') == "llq":
+                        result = c.run('llq -j {0} '.format(job_id))
+                        status = result.stdout.split()[19]
+                    if os.getenv('scheduler') == "slurm":
+                        result = c.run('squeue -j {0} '.format(job_id))
+                        status = result.stdout.split()[12]
+                except IndexError:
+                    print('Either job killed as soon as it started or its done! ')
+                    status = "R"
+            c.close()
+        # print('Job running ... ')
+        # print('NECI is running: {0}'.format(datetime.now()))
+        elif status == "R":
+            print('Job is running, checking if RDMs are created ....')
+        else:
+            print('checking if RDMs are created ....')
+    else:
+        print('checking if RDMs are created ....')
+
+    # file_name_with_full_path = neci_work_dir + 'TwoRDM_aaaa.1'
+
+    while not if_file_exists_in_remote(remote_ip, neci_work_dir + 'TwoRDM_aaaa.1'):
         sleep(60)
     # if if_file_exists_in_remote(remote_ip, file_name_with_full_path):
     print('NECI created RDMs, transfering to MOLCAS work directory ')
@@ -195,17 +204,17 @@ def get_rdms_from_neci(iter, job_folder):
     molcas_WorkDir = os.getenv('MOLCAS_WorkDir')
     remote_WorkDir = os.getenv('REMOTE_NECI_WorkDir')
     neci_WorkDir = remote_WorkDir + job_folder + '/'
-    print('Copying RDMs and NECI output from')
-    print(neci_WorkDir)
-    print(' to ')
-    print(molcas_WorkDir)
+    print('Copying RDMs and NECI output from {} to {}'.format(neci_WorkDir,molcas_WorkDir))
+    # print(neci_WorkDir)
+    # print(' to ')
+    # print(molcas_WorkDir)
     c.get(neci_WorkDir + 'TwoRDM_aaaa.1', local=molcas_WorkDir + 'TwoRDM_aaaa.1')  # ,local=molcas_WorkDir)
     c.get(neci_WorkDir + 'TwoRDM_abab.1', local=molcas_WorkDir + 'TwoRDM_abab.1')
     c.get(neci_WorkDir + 'TwoRDM_abba.1', local=molcas_WorkDir + 'TwoRDM_abba.1')
     c.get(neci_WorkDir + 'TwoRDM_bbbb.1', local=molcas_WorkDir + 'TwoRDM_bbbb.1')
     c.get(neci_WorkDir + 'TwoRDM_baba.1', local=molcas_WorkDir + 'TwoRDM_baba.1')
     c.get(neci_WorkDir + 'TwoRDM_baab.1', local=molcas_WorkDir + 'TwoRDM_baab.1')
-    time.sleep(30)
+    time.sleep(10)
     c.get(neci_WorkDir + 'out', local=molcas_WorkDir + 'neci.out')
     # iter=0
     with c.cd(neci_WorkDir):
@@ -222,13 +231,6 @@ def get_rdms_from_neci(iter, job_folder):
     # c.run('rm TwoRDM*')
     # iter += 1
 
-
-# try:
-# 	input("Continue with MOLCAS run? press any key")
-# 	c.close()
-# except SyntaxError:
-# 	c.close()
-# 	pass
 
 
 def executeMolcas(inp_file):

@@ -37,19 +37,80 @@ def set_variables():
 
     # set environment variables
     os.environ['project'] = project
-    os.environ['REMOTE_MACHINE_IP'] = inp['compute_node']['remote_ip']
+    os.environ['REMOTE_MACHINE_IP']   = inp['compute_node']['remote_ip']
     os.environ['REMOTE_NECI_WorkDir'] = inp['compute_node']['neci_scratch']
-    os.environ['NECI_JOB_SCRIPT'] = inp['compute_node']['neci_job_script']
-    os.environ['WorkDir'] = inp['molcas']['molcas_workdir']
-    os.environ['MOLCAS_WorkDir'] = inp['molcas']['molcas_workdir']
-    os.environ['CurrDir'] = os.getcwd()
-    os.environ['USER'] = inp['compute_node']['user']
-    # os.environ['PASSWORD']            = inp['compute_node']['password']
-    os.environ['scheduler'] = inp['compute_node']['scheduler']
+    os.environ['NECI_JOB_SCRIPT']     = inp['compute_node']['neci_job_script']
+    os.environ['WorkDir']             = inp['molcas']['molcas_workdir']
+    os.environ['MOLCAS_WorkDir']      = inp['molcas']['molcas_workdir']
+    os.environ['CurrDir']             = os.getcwd()
+    os.environ['USER']                = inp['compute_node']['user']
+    if 'password' in inp['compute_node']:
+        os.environ['PASSWORD']        = inp['compute_node']['password']
+    os.environ['scheduler']           = inp['compute_node']['scheduler']
+    os.environ['neci_exec_time']      = inp['compute_node']['neci_exec_time']
 
     # transfer files to remote/local machine to run NECI
 
     return inp_file, out_file, interactive
+
+
+def interactive_run_neci(project,neci_work_dir,it):
+
+    if os.getenv('skip_iter_0') == "True" and it == 0:
+        input("Skipping the 0th iteration, "
+              "make sure to copy existing RDMs to molcas work dir to finish the first iteration, "
+              "enter any key after that \n")
+        status = True
+        # os.environ['skip_iter_0'] = False
+    else:
+        while True:
+            run_molcas = input('Continue to run NECI on {0} (y/n)\n'
+                               .format(os.getenv('REMOTE_MACHINE_IP')))
+            if run_molcas.lower()  == 'y' or run_molcas.lower() == 'n':
+                break
+            else:
+                print("Wrong choice! Try again\n")
+
+        if run_molcas.split()[0] == 'Y' or run_molcas.split()[0] == 'y':
+            job_id = run_neci_on_remote(project, it)
+            input('Enter any key when NECI is done\n')
+            status = check_if_neci_completed(neci_work_dir, job_id, interactive)
+        elif run_molcas.split()[0] == 'N' or run_molcas.split()[0] == 'n':
+            inp_molcas_run = input("(a) Abort MOLCAS ?  \n"
+                                   "(b) Change remote node for NECI calculation \n"
+                                   "(c) more options to come \n")
+            if inp_molcas_run.split()[0] == 'a':
+                os.killpg(os.getpgid(molcas_process.pid), signal.SIGTERM)
+                exit()
+            elif inp_molcas_run.split()[0] == 'b':
+                print("this option is yet to be implemented !")
+                print("Aborting MOLCAS for now !!")
+                os.killpg(os.getpgid(molcas_process.pid), signal.SIGTERM)
+                exit()
+
+    return status
+
+def interactive_activate_molcas():
+
+    while True:
+        inp_val = input("Continue with MOLCAS run? y/N \n ")
+        if inp_val.lower() == 'y' or inp_val.lower() == 'n':
+            break
+        else:
+            print("Wrong choice! Try again\n")
+
+    if inp_val.split()[0] == 'N' or inp_val.split()[0] == 'n':
+        inp_molcas_run = input("(a) Abort MOLCAS ?  \n"
+                               "(b) Analyse NECI OUTPUT \n"
+                               "(Please dont press anything else, it might crash :()")
+        if inp_molcas_run.split()[0] == 'a':
+            os.killpg(os.getpgid(molcas_process.pid), signal.SIGTERM)
+            # molcas_process.kill()
+            exit()
+        elif inp_molcas_run.split()[0] == 'b':
+            analyse_neci()
+    elif inp_val.split()[0] == 'Y' or inp_val.split()[0] == 'y':
+        activate_molcas()
 
 
 def run_neci(MOLCAS_running, interactive, out_file):
@@ -63,35 +124,10 @@ def run_neci(MOLCAS_running, interactive, out_file):
     while MOLCAS_running:
         try:
             MOLCAS_running = check_if_molcas_paused(out_file)
-
             if interactive:
-                if os.getenv('skip_iter_0') == "True" and it == 0:
-                    input("Skipping the 0th iteration, "
-                          "make sure to copy existing RDMs to molcas work dir to finish the first iteration, "
-                          "enter any key after that \n")
-                    status = True
-                    # os.environ['skip_iter_0'] = False
-                else:
-                    run_molcas = input('Continue to run NECI on {0} (y/n)\n'
-                                       .format(os.getenv('REMOTE_MACHINE_IP')))
-                    if run_molcas.split()[0] == 'Y' or run_molcas.split()[0] == 'y':
-                        job_id = run_neci_on_remote(project, it)
-                        status = check_if_neci_completed(neci_work_dir, job_id)
-                    elif run_molcas.split()[0] == 'N' or run_molcas.split()[0] == 'n':
-                        inp_molcas_run = input("(a) Abort MOLCAS ?  \n"
-                                               "(b) Change remote node for NECI calculation \n"
-                                               "(c) more options to come \n")
-                        if inp_molcas_run.split()[0] == 'a':
-                            os.killpg(os.getpgid(molcas_process.pid), signal.SIGTERM)
-                            exit()
-                        elif inp_molcas_run.split()[0] == 'b':
-                            print("this option is yet to be implemented !")
-                            print("Aborting MOLCAS for now !!")
-                            os.killpg(os.getpgid(molcas_process.pid), signal.SIGTERM)
-                            exit()
-                    # reread_inp()
-
+                status = interactive_run_neci(project, neci_work_dir, it)
             else:
+                # special case if the first NECI iteration is to be skipped
                 if os.getenv('skip_iter_0') == "True" and it == 0:
                     input("copy existing RDMs and neci.out to molcas work dir, "
                           "enter any key after that \n")
@@ -99,9 +135,9 @@ def run_neci(MOLCAS_running, interactive, out_file):
                     # os.environ['skip_iter_0'] = False
                 else:
                     job_id = run_neci_on_remote(project, it)
+                    time.sleep(os.getenv('neci_exec_time'))
                     status = check_if_neci_completed(neci_work_dir, job_id)
             if status:
-
                 if os.getenv('skip_iter_0') == "True" and it == 0:
                     pass
                 else:
@@ -109,21 +145,7 @@ def run_neci(MOLCAS_running, interactive, out_file):
 
                 if interactive:
                     try:
-                        inp_val = input("Continue with MOLCAS run? y/N \n "
-                                        "(Please dont press anything else, it might crash :()")
-                        # check_yes_or_no(inp_val)
-                        if inp_val.split()[0] == 'N' or inp_val.split()[0] == 'n':
-                            inp_molcas_run = input("(a) Abort MOLCAS ?  \n"
-                                                   "(b) Analyse NECI OUTPUT \n"
-                                                   "(Please dont press anything else, it might crash :()")
-                            if inp_molcas_run.split()[0] == 'a':
-                                os.killpg(os.getpgid(molcas_process.pid), signal.SIGTERM)
-                                # molcas_process.kill()
-                                exit()
-                            elif inp_molcas_run.split()[0] == 'b':
-                                analyse_neci()
-                        elif inp_val.split()[0] == 'Y' or inp_val.split()[0] == 'y':
-                            activate_molcas()
+                        interactive_activate_molcas()
                     except SyntaxError:
                         pass
                 else:
@@ -153,8 +175,8 @@ if __name__ == '__main__':
         time.sleep(3)
         # molcas_process.kill()
         exit()
-    except Exception as e:
-        print(e)
-        print("killing pymolcas")
-        os.killpg(os.getpgid(molcas_process.pid), signal.SIGTERM)
-        exit()
+    # except Exception as e:
+    #     print(e)
+    #     print("killing pymolcas")
+    #     os.killpg(os.getpgid(molcas_process.pid), signal.SIGTERM)
+    #     exit()

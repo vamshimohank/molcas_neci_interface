@@ -71,3 +71,7 @@ class SFTPHelper(object):
             raise
         else:
             return True
+
+    def close(self):
+        self.sshclient.close()
+        return True
