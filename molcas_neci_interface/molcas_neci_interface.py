@@ -71,13 +71,19 @@ def replace_definedet(project):
             # print(definedet)
     f.close()
 
+    import fileinput
     #neci_inp_file_path = molcas_WorkDir + project + '.FciInp'
     neci_inp_file_path = molcas_WorkDir + 'neci.inp'
-    import fileinput
+
     for line in fileinput.FileInput(neci_inp_file_path, inplace=1):
         # if "calc" in line:
-        if len(line.split()) == 1 and 'calc' in line.split()[0][:4]:
+
+        if len(line.split()) != 0 and 'definedet' in line.split()[0]:
+            line = line.replace(line, definedet+'\n')
+
+        elif len(line.split()) == 1 and 'calc' in line.split()[0][:4]:
             line = line.replace(line, line + definedet+'\n')
+
         print(line, end='')
 
 def run_neci_on_remote(project,iter):
@@ -91,13 +97,11 @@ def run_neci_on_remote(project,iter):
         os.environ["PYTHONWARNINGS"] = "default"
 
     remote_ip = os.getenv('REMOTE_MACHINE_IP')
-    remote_WorkDir = os.getenv('REMOTE_NECI_WorkDir')
     molcas_WorkDir = os.getenv('MOLCAS_WorkDir')
+    neci_WorkDir = os.getenv('REMOTE_NECI_WorkDir')
     CurrDir = os.getenv('CurrDir')
     user = os.getenv('USER')
     neci_job_script = os.getenv('NECI_JOB_SCRIPT')
-    job_folder = str(os.getpid())
-    neci_WorkDir = remote_WorkDir + job_folder + '/'
 
     # replace the definedet line in the neci input
     if iter >= 1:
@@ -114,7 +118,7 @@ def run_neci_on_remote(project,iter):
         c.run('mkdir {0}'.format(neci_WorkDir))
 
     if iter >= 1:
-        c.put(molcas_WorkDir + '/neci.inp', remote=neci_WorkDir)
+        c.put(molcas_WorkDir + '/neci.inp', remote=neci_WorkDir+'input')
     else:
         c.put(molcas_WorkDir + '/' + project + '.FciInp', remote=neci_WorkDir)
 
@@ -180,8 +184,9 @@ def check_if_neci_completed(neci_work_dir, job_id, interactive):
         # print('Job running ... ')
         # print('NECI is running: {0}'.format(datetime.now()))
         elif status == "R":
-            print('Job is running! will wait for {} minutes for it to complete'.format(int(os.getenv('neci_exec_time'))))
-            sleep(float(os.getenv('neci_exec_time')))
+            print('Job is running! will wait for few more seconds for it to complete')
+            # sleep(float(os.getenv('neci_exec_time')))
+            sleep(30)
         else:
             print('checking if RDMs are created ....')
     else:
@@ -197,7 +202,7 @@ def check_if_neci_completed(neci_work_dir, job_id, interactive):
     return True
 
 
-def get_rdms_from_neci(iter, job_folder):
+def get_rdms_from_neci(iter):
     from fabric import Connection
     remote_ip = os.getenv('REMOTE_MACHINE_IP')
     user = os.getenv('USER')
@@ -206,8 +211,7 @@ def get_rdms_from_neci(iter, job_folder):
     c = Connection(remote_ip, user=user, connect_kwargs={"password": password})
 
     molcas_WorkDir = os.getenv('MOLCAS_WorkDir')
-    remote_WorkDir = os.getenv('REMOTE_NECI_WorkDir')
-    neci_WorkDir = remote_WorkDir + job_folder + '/'
+    neci_WorkDir  = os.getenv('REMOTE_NECI_WorkDir')
     print('Copying RDMs and NECI output from {} to {}'.format(neci_WorkDir,molcas_WorkDir))
     # print(neci_WorkDir)
     # print(' to ')
@@ -218,8 +222,9 @@ def get_rdms_from_neci(iter, job_folder):
     c.get(neci_WorkDir + 'TwoRDM_bbbb.1', local=molcas_WorkDir + 'TwoRDM_bbbb.1')
     c.get(neci_WorkDir + 'TwoRDM_baba.1', local=molcas_WorkDir + 'TwoRDM_baba.1')
     c.get(neci_WorkDir + 'TwoRDM_baab.1', local=molcas_WorkDir + 'TwoRDM_baab.1')
-    time.sleep(10)
+    time.sleep(5)
     c.get(neci_WorkDir + 'out', local=molcas_WorkDir + 'neci.out')
+    c.get(neci_WorkDir + 'input', local=molcas_WorkDir + 'neci.inp')
     # iter=0
     with c.cd(neci_WorkDir):
         iter_folder = 'Iter_' + str(iter)
