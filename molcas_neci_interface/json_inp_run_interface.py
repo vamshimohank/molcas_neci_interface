@@ -2,16 +2,19 @@
 from molcas_neci_interface import *
 
 
+def read_input_json():
+    json_inpfile = sys.argv[1]
+    with open(json_inpfile) as json_file:
+        inp = json.load(json_file)
+    return inp
+
+
 def set_variables():
     import time, os, signal, sys, json
 
     os.environ['PYTHONWARNINGS'] = 'ignore'
 
-    json_inpfile = sys.argv[1]
-    # print(json_inpfile)
-
-    with open(json_inpfile) as json_file:
-        inp = json.load(json_file)
+    inp = read_input_json()
 
     if inp['molcas']['interactive'] == 'True':
         interactive = True
@@ -99,17 +102,21 @@ def interactive_activate_molcas():
         else:
             print("Wrong choice! Try again\n")
 
-    if inp_val.split()[0] == 'N' or inp_val.split()[0] == 'n':
+    if inp_val.split()[0].lower() == 'n':
         inp_molcas_run = input("(a) Abort MOLCAS ?  \n"
-                               "(b) Analyse NECI OUTPUT \n"
-                               "(Please dont press anything else, it might crash :()")
-        if inp_molcas_run.split()[0] == 'a':
+                               "(b) Analyse NECI OUTPUT \n")
+        if inp_molcas_run.lower() == 'a' or inp_val.lower() == 'b':
+            break
+        else:
+            print("Wrong choice! Try again\n")
+
+        if inp_molcas_run.split()[0].lower() == 'a':
             os.killpg(os.getpgid(molcas_process.pid), signal.SIGTERM)
             # molcas_process.kill()
             exit()
-        elif inp_molcas_run.split()[0] == 'b':
+        elif inp_molcas_run.split()[0].lower() == 'b':
             analyse_neci()
-    elif inp_val.split()[0] == 'Y' or inp_val.split()[0] == 'y':
+    elif inp_val.split()[0].lower() == 'y':
         activate_molcas()
 
 

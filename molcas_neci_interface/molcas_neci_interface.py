@@ -71,27 +71,14 @@ def replace_definedet(project):
             # print(definedet)
     f.close()
 
-    neci_inp_file_path = molcas_WorkDir + project + '.FciInp'
+    #neci_inp_file_path = molcas_WorkDir + project + '.FciInp'
+    neci_inp_file_path = molcas_WorkDir + 'neci.inp'
     import fileinput
     for line in fileinput.FileInput(neci_inp_file_path, inplace=1):
         # if "calc" in line:
         if len(line.split()) == 1 and 'calc' in line.split()[0][:4]:
             line = line.replace(line, line + definedet+'\n')
         print(line, end='')
-
-
-def copy_to_molcas_workdir(project, neci_scratch_dir):
-    cmd = "scp allogin2.fkf.mpg.de:" + neci_scratch_dir + '/TwoRDM* ./tmp/'
-    subprocess.call("%s" % cmd, shell=True)
-    cmd = "scp allogin2.fkf.mpg.de:" + neci_scratch_dir + '/out .'
-    subprocess.call("%s" % cmd, shell=True)
-
-
-def copy_to_main_dir(project, neci_scratch_dir):
-    shutil.copyfile(os.path.join(neci_scratch_dir, 'TwoRDM_abab.1'), './' + project + '.TwoRDM_abab')
-    shutil.copyfile(os.path.join(neci_scratch_dir, 'TwoRDM_abba.1'), './' + project + '.TwoRDM_abba')
-    shutil.copyfile(os.path.join(neci_scratch_dir, 'OneRDM.1'), './' + project + '.OneRDM')
-
 
 def run_neci_on_remote(project,iter):
     from fabric import Connection
@@ -125,7 +112,12 @@ def run_neci_on_remote(project,iter):
 
     if not if_file_exists_in_remote(remote_ip, neci_WorkDir):
         c.run('mkdir {0}'.format(neci_WorkDir))
-    c.put(molcas_WorkDir + '/' + project + '.FciInp', remote=neci_WorkDir)
+
+    if iter >= 1:
+        c.put(molcas_WorkDir + '/neci.inp', remote=neci_WorkDir)
+    else:
+        c.put(molcas_WorkDir + '/' + project + '.FciInp', remote=neci_WorkDir)
+
     c.put(molcas_WorkDir + '/' + project + '.FciDmp', remote=neci_WorkDir)
     c.put(CurrDir + '/' + neci_job_script, remote=neci_WorkDir)
 
