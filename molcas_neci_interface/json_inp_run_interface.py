@@ -231,6 +231,7 @@ if __name__ == '__main__':
 
         it = 0
         while MOLCAS_running:
+            print('----- Iteration {} ------'.format(it))
             MOLCAS_running = check_if_molcas_paused(out_file)
             read_interrupt_inp()
             status = run_neci(interactive, it)
@@ -247,8 +248,8 @@ if __name__ == '__main__':
         time.sleep(3)
         # molcas_process.kill()
         exit()
-    # except Exception as e:
-    #     print(e)
-    #     print("killing pymolcas")
-    #     os.killpg(os.getpgid(molcas_process.pid), signal.SIGTERM)
-    #     exit()
+    except Exception as e:
+        print(e)
+        print("killing pymolcas")
+        os.killpg(os.getpgid(molcas_process.pid), signal.SIGTERM)
+        exit()
