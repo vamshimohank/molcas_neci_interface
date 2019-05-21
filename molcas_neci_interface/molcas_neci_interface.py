@@ -154,15 +154,25 @@ def check_if_neci_completed(neci_work_dir, job_id, interactive):
     if not interactive:
         if os.getenv('scheduler') == "llq":
             result = c.run('llq -j {0}'.format(job_id))
-            status = result.stdout.split()[19]
-        if os.getenv('scheduler') == "slurm":
+            try:
+                status = result.stdout.split()[19]
+            except IndexError:
+                status = 'U'
+        elif os.getenv('scheduler') == "slurm":
             result = c.run('squeue -j {0}'.format(job_id))
-            status = result.stdout.split()[4]
-        if status != "R":
-            while status != "R":
+            try:
+                status = result.stdout.split()[4]
+            except IndexError:
+                status = 'U'
+        if status == 'U':
+            print('Cannot find job with {0} in the queue'.format(job_id))
+            print("Job either completed or got killed immediately. Will take it as completed ..")
+            status = "C"
+        if status != "R" and status != "C":
+            while status != "R" and status != "C":
                 if status == "I" or status == "PD":
                     print('Job waiting in queue')
-                sleep(15)
+                sleep(10)
                 try:
                     if os.getenv('scheduler') == "llq":
                         result = c.run('llq -j {0} '.format(job_id))
@@ -171,13 +181,15 @@ def check_if_neci_completed(neci_work_dir, job_id, interactive):
                         result = c.run('squeue -j {0} '.format(job_id))
                         status = result.stdout.split()[12]
                 except IndexError:
-                    print('Either job killed as soon as it started or its done! ')
-                    status = "R"
+                    print('Cannot find job with {0} in the queue'.format(job_id))
+                    print("Job either completed or got killed immediately. Will take it as completed ..")
+                    status = "C"
             c.close()
         # print('Job running ... ')
         # print('NECI is running: {0}'.format(datetime.now()))
         elif status == "R":
-            print('Job is running, checking if RDMs are created ....')
+            print('Job is running! will wait for {} minutes for it to complete'.format(int(os.getenv('neci_exec_time'))))
+            sleep(float(os.getenv('neci_exec_time')))
         else:
             print('checking if RDMs are created ....')
     else:
@@ -186,7 +198,7 @@ def check_if_neci_completed(neci_work_dir, job_id, interactive):
     # file_name_with_full_path = neci_work_dir + 'TwoRDM_aaaa.1'
 
     while not if_file_exists_in_remote(remote_ip, neci_work_dir + 'TwoRDM_aaaa.1'):
-        sleep(60)
+        sleep(20)
     # if if_file_exists_in_remote(remote_ip, file_name_with_full_path):
     print('NECI created RDMs, transfering to MOLCAS work directory ')
 

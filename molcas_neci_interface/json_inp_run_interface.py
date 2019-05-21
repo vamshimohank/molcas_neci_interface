@@ -47,7 +47,7 @@ def set_variables():
     if 'password' in inp['compute_node']:
         os.environ['PASSWORD']        = inp['compute_node']['password']
     os.environ['scheduler']           = inp['compute_node']['scheduler']
-    os.environ['neci_exec_time']      = inp['compute_node']['neci_exec_time']
+    os.environ['neci_exec_time']      = str(inp['compute_node']['neci_exec_time'])
 
     # transfer files to remote/local machine to run NECI
 
@@ -113,6 +113,22 @@ def interactive_activate_molcas():
         activate_molcas()
 
 
+def wait_time(t):
+    import time
+    # from tqdm import tqdm
+    # for i in tqdm(range(t)):
+    #     time.sleep(i)
+    import time
+
+    from progress.bar import Bar  # sudo pip install progress
+
+    bar = Bar('Processing', max=20, suffix='%(index)d/%(max)d - %(percent).1f%% - %(eta)ds')
+    for i in range(20):
+        time.sleep(2)  # Do some work
+        bar.next()
+    bar.finish()
+    return None
+
 def run_neci(MOLCAS_running, interactive, out_file):
     import os
 
@@ -135,8 +151,11 @@ def run_neci(MOLCAS_running, interactive, out_file):
                     # os.environ['skip_iter_0'] = False
                 else:
                     job_id = run_neci_on_remote(project, it)
-                    time.sleep(os.getenv('neci_exec_time'))
-                    status = check_if_neci_completed(neci_work_dir, job_id)
+                    print('Waiting for an estimated {0} seconds for NECI run'
+                          .format(float(os.getenv('neci_exec_time'))))
+                    # wait_time(int(os.getenv('neci_exec_time')))
+                    time.sleep(float(os.getenv('neci_exec_time')))
+                    status = check_if_neci_completed(neci_work_dir, job_id, interactive)
             if status:
                 if os.getenv('skip_iter_0') == "True" and it == 0:
                     pass
@@ -164,6 +183,7 @@ if __name__ == '__main__':
     inp_file, out_file, interactive = set_variables()
     # run molcas submission script
     molcas_process = executeMolcas(inp_file)
+    print('pymolcas running with id {}'.format(os.getpgid(molcas_process.pid)))
     MOLCAS_running = True
     try:
         run_neci(MOLCAS_running, interactive, out_file)
@@ -175,8 +195,8 @@ if __name__ == '__main__':
         time.sleep(3)
         # molcas_process.kill()
         exit()
-    # except Exception as e:
-    #     print(e)
-    #     print("killing pymolcas")
-    #     os.killpg(os.getpgid(molcas_process.pid), signal.SIGTERM)
-    #     exit()
+    except Exception as e:
+        print(e)
+        print("killing pymolcas")
+        os.killpg(os.getpgid(molcas_process.pid), signal.SIGTERM)
+        exit()
