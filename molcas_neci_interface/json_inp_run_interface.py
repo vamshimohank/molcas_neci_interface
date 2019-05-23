@@ -248,8 +248,8 @@ if __name__ == '__main__':
         time.sleep(3)
         # molcas_process.kill()
         exit()
-    except Exception as e:
-        print(e)
-        print("killing pymolcas")
-        os.killpg(os.getpgid(molcas_process.pid), signal.SIGTERM)
-        exit()
+    # except Exception as e:
+    #     print(e)
+    #     print("killing pymolcas")
+    #     os.killpg(os.getpgid(molcas_process.pid), signal.SIGTERM)
+    #     exit()

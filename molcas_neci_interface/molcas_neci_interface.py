@@ -184,9 +184,9 @@ def check_if_neci_completed(neci_work_dir, job_id, interactive):
         # print('Job running ... ')
         # print('NECI is running: {0}'.format(datetime.now()))
         elif status == "R":
-            print('Job is running! will wait for few more seconds for it to complete')
+            print('Job is running! waiting for TwoRDM files')
             # sleep(float(os.getenv('neci_exec_time')))
-            sleep(30)
+            # sleep(30)
         else:
             print('checking if RDMs are created ....')
     else:
@@ -195,7 +195,7 @@ def check_if_neci_completed(neci_work_dir, job_id, interactive):
     # file_name_with_full_path = neci_work_dir + 'TwoRDM_aaaa.1'
 
     while not if_file_exists_in_remote(remote_ip, neci_work_dir + 'TwoRDM_aaaa.1'):
-        sleep(20)
+        sleep(120)
     # if if_file_exists_in_remote(remote_ip, file_name_with_full_path):
     print('NECI created RDMs, transfering to MOLCAS work directory ')
 
