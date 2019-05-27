@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-from molcas_neci_interface import *
 
 
 def read_input_json():
@@ -10,7 +9,7 @@ def read_input_json():
 
 
 def set_variables():
-    import time, os, signal, sys, json
+    import os
 
     os.environ['PYTHONWARNINGS'] = 'ignore'
 
@@ -19,6 +18,7 @@ def set_variables():
     if inp['molcas']['interactive'] == 'True':
         interactive = True
         print('Running interactively')
+        logger.info('Running interactively')
     else:
         interactive = False
 
@@ -31,6 +31,7 @@ def set_variables():
     if 'skip_iter_0' in inp['compute_node']:
         if inp['compute_node']['skip_iter_0'] == "True":
             print("skip_iter_0 is True")
+            logger.info("skip_iter_0 is True")
             os.environ['skip_iter_0'] = inp['compute_node']['skip_iter_0']
         else:
             os.environ['skip_iter_0'] = "False"
@@ -42,7 +43,7 @@ def set_variables():
     job_folder = str(os.getpid()) + '/'
     os.environ['project'] = project
     os.environ['REMOTE_MACHINE_IP'] = inp['compute_node']['remote_ip']
-    os.environ['REMOTE_NECI_WorkDir'] = inp['compute_node']['neci_scratch'] + job_folder
+    os.environ['REMOTE_NECI_WorkDir'] = os.path.join(inp['compute_node']['neci_scratch'] , job_folder)
     os.environ['NECI_JOB_SCRIPT'] = inp['compute_node']['neci_job_script']
     os.environ['WorkDir'] = inp['molcas']['molcas_workdir']
     os.environ['MOLCAS_WorkDir'] = inp['molcas']['molcas_workdir']
@@ -53,7 +54,10 @@ def set_variables():
     os.environ['scheduler'] = inp['compute_node']['scheduler']
     os.environ['neci_exec_time'] = str(inp['compute_node']['neci_exec_time'])
 
-    # transfer files to remote/local machine to run NECI
+    # Write the info into log
+
+    logger.info('Remote computer for NECI calculations : {0}'.format(os.getenv('REMOTE_MACHINE_IP')))
+    logger.info('Working directory on the remote computer : {0}'.format(os.getenv('REMOTE_NECI_WorkDir')))
 
     return inp_file, out_file, interactive
 
@@ -75,6 +79,7 @@ def interactive_run_neci(project, it):
                 break
             else:
                 print("Wrong choice! Try again\n")
+                logger.info("Wrong choice! Try again\n")
 
         if run_molcas.split()[0] == 'Y' or run_molcas.split()[0] == 'y':
             job_id = run_neci_on_remote(project, it)
@@ -89,7 +94,9 @@ def interactive_run_neci(project, it):
                 exit()
             elif inp_molcas_run.split()[0] == 'b':
                 print("this option is yet to be implemented !")
+                logger.info("this option is yet to be implemented !")
                 print("Aborting MOLCAS for now !!")
+                logger.info("Aborting MOLCAS for now !!")
                 os.killpg(os.getpgid(molcas_process.pid), signal.SIGTERM)
                 exit()
 
@@ -103,6 +110,7 @@ def interactive_activate_molcas():
             break
         else:
             print("Wrong choice! Try again\n")
+            logger.info("Wrong choice! Try again\n")
 
     if inp_val.split()[0].lower() == 'n':
         while True:
@@ -112,6 +120,7 @@ def interactive_activate_molcas():
                 break
             else:
                 print("Wrong choice! Try again\n")
+                logger.info("Wrong choice! Try again\n")
 
         if inp_molcas_run.split()[0].lower() == 'a':
             os.killpg(os.getpgid(molcas_process.pid), signal.SIGTERM)
@@ -124,7 +133,6 @@ def interactive_activate_molcas():
 
 
 def wait_time(t):
-    import time
     # from tqdm import tqdm
     # for i in tqdm(range(t)):
     #     time.sleep(i)
@@ -159,10 +167,12 @@ def run_neci(interactive, it):
                 # os.environ['skip_iter_0'] = False
             else:
                 job_id = run_neci_on_remote(project, it)
-                print('Waiting for an estimated {0} seconds for NECI run'
-                      .format(float(os.getenv('neci_exec_time'))))
+                #print('Waiting for an estimated {0} seconds for NECI run'
+                #      .format(float(os.getenv('neci_exec_time'))))
+                #logger.info('Waiting for an estimated {0} seconds for NECI run'
+                #      .format(float(os.getenv('neci_exec_time'))))
                 # wait_time(int(os.getenv('neci_exec_time')))
-                time.sleep(float(os.getenv('neci_exec_time')))
+                #time.sleep(float(os.getenv('neci_exec_time')))
                 status = check_if_neci_completed(neci_work_dir, job_id, interactive)
         return status
     except KeyboardInterrupt:
@@ -189,33 +199,16 @@ def restart_rasscf(status, it):
 
     # return MOLCAS_running
 
-def read_interrupt_inp():
-    try:
-        f = open(os.getenv('CurrDir')+'/INTERRUPT', 'r')
-        print('Interrupted! what would you like to do?')
-        os.remove(os.getenv('CurrDir')+'/INTERRUPT')
-        while True:
-            inp_molcas_run = input("(a) Abort MOLCAS ?  \n"
-                               "(b) Continue \n"
-                               "(c) more options to come \n")
-
-            if inp_molcas_run.split()[0].lower() == 'a':
-                os.killpg(os.getpgid(molcas_process.pid), signal.SIGTERM)
-                exit()
-            elif inp_molcas_run.split()[0].lower() == 'b':
-               break
-            else:
-                print('Wrong option! Try again..\n')
-        f.close()
-    except FileNotFoundError:
-        pass
 
 
 
 if __name__ == '__main__':
 
-    # from molcas_neci_interface import *
+    from molcas_neci_interface import *
     import time, os, signal, sys, json
+    print('----- MOLCAS NECI INTERFACE ----')
+    logger.info('MOLCAS NECI Interface ')
+    logger.info('May 2018: Vamshi M Katukuri ')
 
     try:
         # set all the variables
@@ -227,11 +220,13 @@ if __name__ == '__main__':
 
         MOLCAS_running = True
         print('pymolcas running with id {}'.format(os.getpgid(molcas_process.pid)))
+        logger.info('pymolcas running with id {}'.format(os.getpgid(molcas_process.pid)))
         read_interrupt_inp()
 
         it = 0
         while MOLCAS_running:
             print('----- Iteration {} ------'.format(it))
+            logger.info('----- Iteration {} ------'.format(it))
             MOLCAS_running = check_if_molcas_paused(out_file)
             read_interrupt_inp()
             status = run_neci(interactive, it)
@@ -242,6 +237,7 @@ if __name__ == '__main__':
 
     except KeyboardInterrupt:
         print('\n killing molcas subprocess')
+        logger.info('\n killing molcas subprocess')
         os.killpg(os.getpgid(molcas_process.pid), signal.SIGTERM)
         # print('Sending llcancel command to the remote machine')
         MOLCAS_running = False
