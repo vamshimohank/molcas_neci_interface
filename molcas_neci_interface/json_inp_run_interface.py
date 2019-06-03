@@ -83,16 +83,26 @@ def interactive_run_neci(project, it):
 
         if run_molcas.split()[0] == 'Y' or run_molcas.split()[0] == 'y':
             job_id = run_neci_on_remote(project, it)
+            logger.info('Enter any key when NECI is done\n')
             input('Enter any key when NECI is done\n')
             status = check_if_neci_completed(neci_work_dir, job_id, interactive)
         elif run_molcas.split()[0] == 'N' or run_molcas.split()[0] == 'n':
             inp_molcas_run = input("(a) Abort MOLCAS ?  \n"
-                                   "(b) Change remote node for NECI calculation \n"
-                                   "(c) more options to come \n")
+                                   "(b) Run non interactively \n"
+                                   "(c) Copy RDMs from a different remote folder \n"
+                                   "(d) Change remote node for NECI calculation \n"
+                                   "(e) more options to come \n")
             if inp_molcas_run.split()[0] == 'a':
+                logger.info('Stopping MOLCAS!')
                 os.killpg(os.getpgid(molcas_process.pid), signal.SIGTERM)
                 exit()
             elif inp_molcas_run.split()[0] == 'b':
+                print('Continuing non-interactively')
+                logger.info('Continuing non-interactively')
+                interactive = False
+                job_id = run_neci_on_remote(project, it)
+                status = check_if_neci_completed(neci_work_dir, job_id, interactive)
+            elif inp_molcas_run.split()[0] == 'd':
                 print("this option is yet to be implemented !")
                 logger.info("this option is yet to be implemented !")
                 print("Aborting MOLCAS for now !!")
@@ -100,7 +110,7 @@ def interactive_run_neci(project, it):
                 os.killpg(os.getpgid(molcas_process.pid), signal.SIGTERM)
                 exit()
 
-    return status
+    return status, interactive
 
 
 def interactive_activate_molcas():
@@ -157,7 +167,7 @@ def run_neci(interactive, it):
     # while MOLCAS_running:
     try:
         if interactive:
-            status = interactive_run_neci(project, neci_work_dir, it)
+            status, interactive = interactive_run_neci(project, it)
         else:
             # special case if the first NECI iteration is to be skipped
             if os.getenv('skip_iter_0') == "True" and it == 0:
@@ -167,19 +177,13 @@ def run_neci(interactive, it):
                 # os.environ['skip_iter_0'] = False
             else:
                 job_id = run_neci_on_remote(project, it)
-                #print('Waiting for an estimated {0} seconds for NECI run'
-                #      .format(float(os.getenv('neci_exec_time'))))
-                #logger.info('Waiting for an estimated {0} seconds for NECI run'
-                #      .format(float(os.getenv('neci_exec_time'))))
-                # wait_time(int(os.getenv('neci_exec_time')))
-                #time.sleep(float(os.getenv('neci_exec_time')))
                 status = check_if_neci_completed(neci_work_dir, job_id, interactive)
-        return status
+        return status, interactive
     except KeyboardInterrupt:
         os.killpg(os.getpgid(molcas_process.pid), signal.SIGTERM)
 
 
-def restart_rasscf(status, it):
+def restart_rasscf(status, it, interactive):
     try:
         if status:
             if os.getenv('skip_iter_0') == "True" and it == 0:
@@ -229,9 +233,9 @@ if __name__ == '__main__':
             logger.info('----- Iteration {} ------'.format(it))
             MOLCAS_running = check_if_molcas_paused(out_file)
             read_interrupt_inp()
-            status = run_neci(interactive, it)
+            status, interactive= run_neci(interactive, it)
             read_interrupt_inp()
-            restart_rasscf(status, it)
+            restart_rasscf(status, it, interactive)
             read_interrupt_inp()
             it = it + 1
 

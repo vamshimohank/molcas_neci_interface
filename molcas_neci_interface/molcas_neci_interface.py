@@ -1,12 +1,13 @@
 from __future__ import print_function
-import sys, shutil, os
-from typing import BinaryIO
 
+import os
 import subprocess
+import sys
 import time
 
 from logger import *
 
+from molcas_neci_interface import logger
 
 os.environ['PYTHONWARNINGS'] = "ignore"
 
@@ -16,30 +17,6 @@ if not sys.warnoptions:
     warnings.simplefilter("default")  # Change the filter in this process
     os.environ["PYTHONWARNINGS"] = "ignore"
 
-# def read_interrupt_inp():
-#     try:
-#         f = open(os.getenv('CurrDir')+'/INTERRUPT', 'r')
-#         print('Interrupted! what would you like to do?')
-#         logger.info('Interrupted! what would you like to do?')
-#         os.remove(os.getenv('CurrDir')+'/INTERRUPT')
-#         while True:
-#             inp_molcas_run = input("(a) Abort MOLCAS ?  \n"
-#                                "(b) Continue \n"
-#                                "(c) more options to come \n")
-#
-#             if inp_molcas_run.split()[0].lower() == 'a':
-#                 os.killpg(os.getpgid(molcas_process.pid), signal.SIGTERM)
-#                 exit()
-#             elif inp_molcas_run.split()[0].lower() == 'b':
-#                break
-#             else:
-#                 print('Wrong option! Try again..\n')
-#                 logger.info('Wrong option! Try again..\n')
-#         f.close()
-#     except FileNotFoundError:
-#         pass
-
-
 def if_file_exists_in_remote(remote_ip, file_name_with_full_path):
     from paramiko_helper.ssh_helper import SFTPHelper
     import os
@@ -48,8 +25,8 @@ def if_file_exists_in_remote(remote_ip, file_name_with_full_path):
         password = os.getenv('PASSWORD')
 
         c = SFTPHelper()
-        ssh_args = {"password": password, "username": user, "auth_timeout": 3600.0, "banner_timeout": 3600.0,
-                    "timeout": 3600.0}
+        ssh_args = {"password": password, "username": user, "auth_timeout": 7600.0, "banner_timeout": 7600.0,
+                    "timeout": 7600.0}
         c.connect(remote_ip, **ssh_args)
         if c.exists(file_name_with_full_path):
             c.close()
@@ -126,7 +103,7 @@ def run_neci_on_remote(project, iter):
     import sys, os
 
     if not sys.warnoptions:
-        import os, warnings
+        import warnings
         warnings.simplefilter("ignore")  # Change the filter in this process
         os.environ["PYTHONWARNINGS"] = "default"
 
@@ -173,6 +150,11 @@ def run_neci_on_remote(project, iter):
     c.close()
     return job_id
 
+def stop_pymolcas():
+    logger.info('killing pymolcas')
+    os.killpg(os.getpgid(molcas_process.pid), signal.SIGTERM)
+
+
 
 def read_interrupt_inp(reason="INTERRUPT"):
     import signal
@@ -212,7 +194,6 @@ def read_interrupt_inp(reason="INTERRUPT"):
 
 def check_if_neci_completed(neci_work_dir, job_id, interactive):
     from time import sleep
-    from datetime import datetime
     from fabric import Connection
     remote_ip = os.getenv('REMOTE_MACHINE_IP')
     user = os.getenv('USER')
@@ -254,7 +235,7 @@ def check_if_neci_completed(neci_work_dir, job_id, interactive):
                                 status = "R"
                                 break
                             else:
-                                sleep(2)
+                                sleep(1)
                     except KeyboardInterrupt:
                         break
                 try:
@@ -272,18 +253,58 @@ def check_if_neci_completed(neci_work_dir, job_id, interactive):
                     print('Cannot find job with {0} in the queue'.format(job_id))
                     logger.info('Cannot find job with {0} in the queue'.format(job_id))
                     print("Job either completed or got killed immediately. Will take it as completed ..")
-                    logger.info("Job either completed or got killed immediately. Will take it as completed ..")
+                    logger.info("Job either completed or got killed immediately. Will take it as running ..")
                     status = "C"
-            print('Job is running ... ')
-            logger.info('Job is running!')
-            print('Waiting for an estimated {0} seconds for NECI to produce RDMs'
-                  .format(float(os.getenv('neci_exec_time'))))
-            logger.info('Waiting for an estimated {0} seconds for NECI to produce RDMs'
-                        .format(float(os.getenv('neci_exec_time'))))
-            time.sleep(float(os.getenv('neci_exec_time')))
-            print('checking if RDMs are created ....')
-            logger.info('checking if RDMs are created ....')
+            if status != "C":
+                print('Job is running ... ')
+                logger.info('Job is running!')
+
+                print('Waiting for an estimated {0} seconds for NECI to produce RDMs'
+                    .format(float(os.getenv('neci_exec_time'))))
+                logger.info('Waiting for an estimated {0} seconds for NECI to produce RDMs'
+                            .format(float(os.getenv('neci_exec_time'))))
+            # time.sleep(float(os.getenv('neci_exec_time')))
+                wait_time = float(os.getenv('neci_exec_time'))
+                for t in range(60):
+                    try:
+                        time.sleep(wait_time/60)
+                    # print('Elapsed time : {:05.3f}'.format(t*(wait_time/60)), end="\r")
+                        print('Waiting for : {:05.3f} seconds'.format(wait_time - t*(wait_time/60)), end="\r")
+                    except KeyboardInterrupt:
+                        break
+                print('checking if RDMs are created ....')
+                logger.info('checking if RDMs are created ....')
         # print('NECI is running: {0}'.format(datetime.now()))
+            else:
+                print('Job canceled ')
+                logger.info('Job is canceled!')
+                print("check the reason for the reason and resubmit the calcualtion on the remote")
+                try:
+                    while True:
+                        status = input("Press R if the new job is submitted and running or just to continue\n")
+                        if status.lower() == "r":
+                            status = "R"
+                            print('Job is running!') 
+                            logger.info('Job is running!') 
+                            print('Waiting for an estimated {0} seconds for NECI to produce RDMs'
+                                  .format(float(os.getenv('neci_exec_time'))))
+                            logger.info('Waiting for an estimated {0} seconds for NECI to produce RDMs'
+                                  .format(float(os.getenv('neci_exec_time'))))
+                            wait_time = float(os.getenv('neci_exec_time'))
+                            for t in range(60):
+                                try:
+                                    time.sleep(wait_time/60)
+                                    print('Waiting for : {:05.3f} seconds'.format(wait_time - t*(wait_time/60)), end="\r")
+                                except KeyboardInterrupt:
+                                    break
+                            print('checking if RDMs are created ....')
+                            logger.info('checking if RDMs are created ....')
+                            break
+                        else:
+                            print("Wrong choice! Try again")
+                except KeyboardInterrupt:
+                    logger.info('killing pymolcas')
+                    os.killpg(os.getpgid(molcas_process.pid), signal.SIGTERM)
         elif status == "R":
             print('Job is running!') 
             logger.info('Job is running!') 
@@ -291,21 +312,36 @@ def check_if_neci_completed(neci_work_dir, job_id, interactive):
                   .format(float(os.getenv('neci_exec_time'))))
             logger.info('Waiting for an estimated {0} seconds for NECI to produce RDMs'
                   .format(float(os.getenv('neci_exec_time'))))
-            time.sleep(float(os.getenv('neci_exec_time')))
+            wait_time = float(os.getenv('neci_exec_time'))
+            for t in range(60):
+                try:
+                    time.sleep(wait_time/60)
+                    print('Waiting for : {:05.3f} seconds'.format(wait_time - t*(wait_time/60)), end="\r")
+                except KeyboardInterrupt:
+                    break
             print('checking if RDMs are created ....')
             logger.info('checking if RDMs are created ....')
         else:
             print('checking if RDMs are created ....')
             logger.info('checking if RDMs are created ....')
     else:
-        print('checking if RDMs are created ....')
-        logger.info('checking if RDMs are created ....')
+        if status != "C":
+            print('checking if RDMs are created ....')
+            logger.info('checking if RDMs are created ....')
 
     # file_name_with_full_path = neci_work_dir + 'TwoRDM_aaaa.1'
 
     while not if_file_exists_in_remote(remote_ip, neci_work_dir + 'TwoRDM_aaaa.1'):
-        sleep(10)
-        read_interrupt_inp() 
+        wait_time = 30
+        for t in range(60):
+            try:
+                time.sleep(wait_time/60)
+                read_interrupt_inp()
+                # print('Waiting for : {:4.3f}'.format(t*(wait_time/60)), end="\r")
+                # print('Waiting for : {:05.3f} seconds'.format(wait_time - t*(wait_time/60)), end="\r")
+            except KeyboardInterrupt:
+                break
+        read_interrupt_inp()
     # if if_file_exists_in_remote(remote_ip, file_name_with_full_path):
     print('NECI created RDMs, transfering to MOLCAS work directory ')
     logger.info('NECI created RDMs, transfering to MOLCAS work directory ')
@@ -334,7 +370,7 @@ def get_rdms_from_neci(iter):
     c.get(os.path.join(neci_WorkDir , 'TwoRDM_abba.1'), local = os.path.join(molcas_WorkDir , 'TwoRDM_abba.1'))  # ,local=molcas_WorkDir)
     c.get(os.path.join(neci_WorkDir , 'TwoRDM_baba.1'), local = os.path.join(molcas_WorkDir , 'TwoRDM_baba.1'))  # ,local=molcas_WorkDir)
     c.get(os.path.join(neci_WorkDir , 'TwoRDM_baab.1'), local = os.path.join(molcas_WorkDir , 'TwoRDM_baab.1'))  # ,local=molcas_WorkDir)
-    time.sleep(5)
+    time.sleep(3)
     c.get(os.path.join(neci_WorkDir , 'out'), local = os.path.join(molcas_WorkDir , 'neci.out'))
     c.get(os.path.join(neci_WorkDir , 'input'), local = os.path.join(molcas_WorkDir , 'neci.inp'))
     # iter=0
@@ -380,17 +416,15 @@ def executeMolcas(inp_file):
     return molcas_process
 
 
-def check_if_molcas_paused(out_file, molcas_runtime=20):
+def check_if_molcas_paused(out_file, molcas_runtime=10):
     time.sleep(molcas_runtime)
     f = open(out_file, 'r')
-    line_temp = ''
     while True:
         line = f.readline()
         if not line:
             time.sleep(molcas_runtime)
         else:
             if len(line.split()) != 0 and line.split()[0] == "PAUSED":
-                # molcas_WorkDir = line_temp.split()[0]
                 print('MOLCAS paused and files for NECI are produced', )
                 logger.info('MOLCAS paused and files for NECI are produced', )
                 f.close()
@@ -409,7 +443,6 @@ def check_if_molcas_paused(out_file, molcas_runtime=20):
 def analyse_neci():
     import subprocess
     import tarfile
-    import numpy as np
 
     iter = 0
     tar = tarfile.open("Iter_" + str(iter) + '.tar.gz', "r:gz")
