@@ -29,8 +29,9 @@ def calc_Ncsf(S,norb,nele):
 
 if __name__ == '__main__':
 
-    S=1
-    nele = 4
-    norb = 4
+    import sys
+    S=0
+    nele = int(sys.argv[1])
+    norb = int(sys.argv[2])
     print(calc_Ncsf(S,norb,nele))
-    print(calc_Ndet(4,4))
+    print(calc_Ndet(norb,nele))
